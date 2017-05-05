@@ -8,6 +8,7 @@ using Dapper;
 using AngleSharp.Parser.Html;
 using AngleSharp.Dom;
 using System.Threading;
+using System.Collections.Generic;
 
 namespace PathOfExileDataScraper
 {
@@ -54,39 +55,40 @@ namespace PathOfExileDataScraper
         internal async Task GetGenericWeapons()
         {
 
-            await _connection.ExecuteAsync("create table 'GenericWeapons' (" +
-                "'Name' text not null, " +
-                "'Level' integer, " +
-                "'Strength' integer, " +
-                "'Dexterity' integer, " +
-                "'Intelligence' integer, " +
-                "'Damage' text, " +
-                "'APS' real, " +
-                "'CritChance' real, " +
-                "'DPS' real, " +
-                "'Stats' text," +
-                "'ImageUrl' text," +
-                "primary key('Name') )");
+            Log("Getting axes...");
+
+            await _connection.ExecuteAsync("CREATE TABLE 'GenericWeapons' (" +
+                "'Name' TEXT NOT NULL UNIQUE, " +
+                "'LevelReq' INTEGER, " +
+                "'Strength' INTEGER, " +
+                "'Dexterity' INTEGER, " +
+                "'Intelligence' INTEGER, " +
+                "'Damage' TEXT, " +
+                "'APS' REAL, " +
+                "'CritChance' REAL, " +
+                "'DPS' REAL, " +
+                "'Stats' TEXT," +
+                "'ImageUrl' TEXT," +
+                "PRIMARY KEY('Name') )");
 
             var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericAxesUrl));
             var mainDom = dom.GetElementById("mw-content-text");
             var weapons = mainDom.GetElementsByTagName("tbody").SelectMany(element => element.GetElementsByTagName("tr").Where(e => e.TextContent != "ItemDamageAPSCritDPSStats"));
             _size = weapons.Count();
-            var tasks = new Task[_size];
+            var store = new List<GenericWeapon>();
 
-            Parallel.For(0, _size, new ParallelOptions { MaxDegreeOfParallelism = 1 }, index =>
+            Parallel.ForEach(weapons, new ParallelOptions { MaxDegreeOfParallelism = 1 }, async axe =>
             {
-
-                tasks[index] = GetGenericAxes(weapons.ElementAt(index));
-
+                store.Add(await GetGenericAxes(axe));
             });
 
-            Task.WaitAll(tasks);
+            await _connection.InsertAsync(store);
+
             _counter = 0;
 
         }
 
-        internal Task GetGenericAxes(IElement weapon)
+        internal Task<GenericWeapon> GetGenericAxes(IElement weapon)
         {
 
             var statLines = weapon.GetElementsByTagName("td");
@@ -95,21 +97,22 @@ namespace PathOfExileDataScraper
             {
 
                 Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                Level = int.Parse(statLines[1].TextContent),
+                LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
                 Strength = int.Parse(statLines[2].TextContent),
                 Dexterity = int.Parse(statLines[3].TextContent),
                 Damage = statLines[4].TextContent,
                 APS = double.Parse(statLines[5].TextContent),
                 CritChance = double.Parse(statLines[6].TextContent.Substring(0, statLines[6].TextContent.Length - 2)), //i have no idea it there will always be 2 trailing digits after the .
                 DPS = double.Parse(statLines[7].TextContent),
-                ImageUrl = $"https://hydra-media.cursecdn.com/pathofexile.gamepedia.com/d/d1{statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a")[1].Children.FirstOrDefault().GetAttribute("alt")}"
+                ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                Stats = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
 
             };
 
-            _connection.InsertAsync(axe).GetAwaiter().GetResult();
             InLineLog(Interlocked.Increment(ref _counter).ToString() + $"/{_size}");
+            return Task.FromResult(axe);
 
-            return Task.CompletedTask;
+            //return Task.CompletedTask;
 
         }
 
