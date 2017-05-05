@@ -65,11 +65,12 @@ namespace PathOfExileDataScraper
                 "'CritChance' real, " +
                 "'DPS' real, " +
                 "'Stats' text," +
-                "'ImageUrl' text )");
+                "'ImageUrl' text," +
+                "primary key('Name') )");
 
             var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericAxesUrl));
             var mainDom = dom.GetElementById("mw-content-text");
-            var weapons = mainDom.GetElementsByTagName("tbody").SelectMany(element => element.GetElementsByTagName("tr"));
+            var weapons = mainDom.GetElementsByTagName("tbody").SelectMany(element => element.GetElementsByTagName("tr").Where(e => e.TextContent != "ItemDamageAPSCritDPSStats"));
             _size = weapons.Count();
             var tasks = new Task[_size];
 

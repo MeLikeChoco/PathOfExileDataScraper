@@ -12,6 +12,7 @@ namespace PathOfExileDataScraper
     public class GenericWeapon
     {
 
+        [ExplicitKey]
         internal string Name { get; set; }
         internal int Level { get; set; }
         internal int Strength { get; set; } = 0;
