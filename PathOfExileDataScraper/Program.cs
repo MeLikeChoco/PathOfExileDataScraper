@@ -132,9 +132,10 @@ namespace PathOfExileDataScraper
 
             _genericArmours = new ConcurrentBag<GenericArmour>();
 
-            await GetGenericBodyArmourAsync();
-            await GetGenericBootsAsync();
-            await GetGenericGlovesAsync();
+            await GetGenericArmoursAsync(GenericBodyArmoursUrl, "Body Armour", "body armours");
+            await GetGenericArmoursAsync(GenericBodyArmoursUrl, "Boot", "boots");
+            await GetGenericArmoursAsync(GenericBodyArmoursUrl, "Glove", "gloves");
+            await GetGenericArmoursAsync(GenericBodyArmoursUrl, "Helmet", "helmets");
 
             Log("Inserting generic armours into database...");
             await _connection.InsertAsync(_genericArmours);
@@ -652,12 +653,12 @@ namespace PathOfExileDataScraper
 
         }
 
-        internal async Task GetGenericBodyArmourAsync()
+        internal async Task GetGenericArmoursAsync(string url, string upperCaseSingular, string lowerCasePlural)
         {
 
-            Log("Getting armor body armour...");
+            Log($"Getting armor {lowerCasePlural}...");
 
-            var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericBodyArmoursUrl));
+            var dom = await _parser.ParseAsync(await _web.GetStringAsync(url));
             var mainDom = dom.GetElementById("mw-content-text");
             var armours = mainDom.GetElementsByTagName("tbody");
 
@@ -677,7 +678,7 @@ namespace PathOfExileDataScraper
                     Armour = int.Parse(statLines[3].TextContent),
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Stats = statLines.ElementAtOrDefault(4)?.TextContent ?? "N/A",
-                    Type = "Body Armour",
+                    Type = $"{upperCaseSingular}",
 
                 };
 
@@ -685,8 +686,8 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting armor body armour.");
-            Log("Getting evasion body armour...");
+            Log($"\nFinished getting armor {lowerCasePlural}.");
+            Log($"Getting evasion {lowerCasePlural}...");
 
             var evasionBodyArmours = armours.ElementAtOrDefault(1).Children.Where(element => !element.TextContent.Contains("Stats"));
 
@@ -704,7 +705,7 @@ namespace PathOfExileDataScraper
                     Evasion = int.Parse(statLines[3].TextContent),
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Stats = statLines.ElementAtOrDefault(4)?.TextContent ?? "N/A",
-                    Type = "Body Armour",
+                    Type = $"{upperCaseSingular}",
 
                 };
 
@@ -712,8 +713,8 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting evasion body armour.");
-            Log("Getting energy shield body armour...");
+            Log($"\nFinished getting evasion {lowerCasePlural}.");
+            Log($"Getting energy shield {lowerCasePlural}...");
 
             var energyShieldArmours = armours.ElementAtOrDefault(2).Children.Where(element => !element.TextContent.Contains("Stats"));
 
@@ -731,7 +732,7 @@ namespace PathOfExileDataScraper
                     EnergyShield = int.Parse(statLines[3].TextContent),
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Stats = statLines.ElementAtOrDefault(4)?.TextContent ?? "N/A",
-                    Type = "Body Armour",
+                    Type = $"{upperCaseSingular}",
 
                 };
 
@@ -739,8 +740,8 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting energy shield body armour.");
-            Log("Getting armour/evasion body armour...");
+            Log($"\nFinished getting energy shield {lowerCasePlural}.");
+            Log($"Getting armour/evasion {lowerCasePlural}...");
 
             var armourEvasionArmours = armours.ElementAtOrDefault(3).Children.Where(element => !element.TextContent.Contains("Stats"));
 
@@ -760,7 +761,7 @@ namespace PathOfExileDataScraper
                     Evasion = int.Parse(statLines[5].TextContent),
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Stats = statLines.ElementAtOrDefault(6)?.TextContent ?? "N/A",
-                    Type = "Body Armour",
+                    Type = $"{upperCaseSingular}",
 
                 };
 
@@ -768,8 +769,8 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting armour/evasion body armour.");
-            Log("Getting armour/energy shield body armour...");
+            Log($"\nFinished getting armour/evasion {lowerCasePlural}.");
+            Log($"Getting armour/energy shield {lowerCasePlural}...");
 
             var armourEnergyArmours = armours.ElementAtOrDefault(4).Children.Where(element => !element.TextContent.Contains("Stats"));
 
@@ -789,7 +790,7 @@ namespace PathOfExileDataScraper
                     EnergyShield = int.Parse(statLines[5].TextContent),
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Stats = statLines.ElementAtOrDefault(6)?.TextContent ?? "N/A",
-                    Type = "Body Armour",
+                    Type = $"{upperCaseSingular}",
 
                 };
 
@@ -797,8 +798,8 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting armour/energy shield body armour.");
-            Log("Getting evasion/energy shield body armour...");
+            Log($"\nFinished getting armour/energy shield {lowerCasePlural}.");
+            Log($"Getting evasion/energy shield {lowerCasePlural}...");
 
             var evasionEnergyArmours = armours.ElementAtOrDefault(5).Children.Where(element => !element.TextContent.Contains("Stats"));
 
@@ -818,7 +819,7 @@ namespace PathOfExileDataScraper
                     EnergyShield = int.Parse(statLines[5].TextContent),
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Stats = statLines.ElementAtOrDefault(6)?.TextContent ?? "N/A",
-                    Type = "Body Armour",
+                    Type = $"{upperCaseSingular}",
 
                 };
 
@@ -826,365 +827,11 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting evasion/energy shield body armour.");
+            Log($"\nFinished getting evasion/energy shield body armour.");
 
         }
 
-        internal async Task GetGenericBootsAsync()
-        {
-
-            Log("Getting armor boots...");
-
-            var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericBootsUrl));
-            var mainDom = dom.GetElementById("mw-content-text");
-            var boots = mainDom.GetElementsByTagName("tbody");
-
-            var strengthBoots = boots.FirstOrDefault().Children.Where(element => !element.TextContent.Contains("Stats"));
-
-            Parallel.ForEach(strengthBoots, boot =>
-            {
-
-                var statLines = boot.GetElementsByTagName("td");
-
-                var armour = new GenericArmour
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Strength = int.Parse(statLines[2].TextContent),
-                    Armour = int.Parse(statLines[3].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(4)?.TextContent ?? "N/A",
-                    Type = "Boot",
-
-                };
-
-                _genericArmours.Add(armour);
-
-            });
-
-            Log("\nFinished getting armor boots.");
-            Log("Getting evasion boots...");
-
-            var evasionBoots = boots.ElementAtOrDefault(1).Children.Where(element => !element.TextContent.Contains("Stats"));
-
-            Parallel.ForEach(evasionBoots, boot =>
-            {
-
-                var statLines = boot.GetElementsByTagName("td");
-
-                var armour = new GenericArmour
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Dexterity = int.Parse(statLines[2].TextContent),
-                    Evasion = int.Parse(statLines[3].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(4)?.TextContent ?? "N/A",
-                    Type = "Boot",
-
-                };
-
-                _genericArmours.Add(armour);
-
-            });
-
-            Log("\nFinished getting evasion boots.");
-            Log("Getting energy shield boots...");
-
-            var energyShieldBoots = boots.ElementAtOrDefault(2).Children.Where(element => !element.TextContent.Contains("Stats"));
-
-            Parallel.ForEach(energyShieldBoots, boot =>
-            {
-
-                var statLines = boot.GetElementsByTagName("td");
-
-                var armour = new GenericArmour
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Intelligence = int.Parse(statLines[2].TextContent),
-                    EnergyShield = int.Parse(statLines[3].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(4)?.TextContent ?? "N/A",
-                    Type = "Boot",
-
-                };
-
-                _genericArmours.Add(armour);
-
-            });
-
-            Log("\nFinished getting energy shield boots.");
-            Log("Getting armour/evasion boots...");
-
-            var armourEvasionBoots = boots.ElementAtOrDefault(3).Children.Where(element => !element.TextContent.Contains("Stats"));
-
-            Parallel.ForEach(armourEvasionBoots, boot =>
-            {
-
-                var statLines = boot.GetElementsByTagName("td");
-
-                var armour = new GenericArmour
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Strength = int.Parse(statLines[2].TextContent),
-                    Dexterity = int.Parse(statLines[3].TextContent),
-                    Armour = int.Parse(statLines[4].TextContent),
-                    Evasion = int.Parse(statLines[5].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(6)?.TextContent ?? "N/A",
-                    Type = "Boot",
-
-                };
-
-                _genericArmours.Add(armour);
-
-            });
-
-            Log("\nFinished getting armour/evasion boots.");
-            Log("Getting armour/energy shield boots...");
-
-            var armourEnergyBoots = boots.ElementAtOrDefault(4).Children.Where(element => !element.TextContent.Contains("Stats"));
-
-            Parallel.ForEach(armourEnergyBoots, boot =>
-            {
-
-                var statLines = boot.GetElementsByTagName("td");
-
-                var armour = new GenericArmour
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Strength = int.Parse(statLines[2].TextContent),
-                    Intelligence = int.Parse(statLines[3].TextContent),
-                    Armour = int.Parse(statLines[4].TextContent),
-                    EnergyShield = int.Parse(statLines[5].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(6)?.TextContent ?? "N/A",
-                    Type = "Boot",
-
-                };
-
-                _genericArmours.Add(armour);
-
-            });
-
-            Log("\nFinished getting armour/energy shield boots.");
-            Log("Getting evasion/energy shield boots...");
-
-            var evasionEnergyBoots = boots.ElementAtOrDefault(5).Children.Where(element => !element.TextContent.Contains("Stats"));
-
-            Parallel.ForEach(evasionEnergyBoots, boot =>
-            {
-
-                var statLines = boot.GetElementsByTagName("td");
-
-                var armour = new GenericArmour
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Dexterity = int.Parse(statLines[2].TextContent),
-                    Intelligence = int.Parse(statLines[3].TextContent),
-                    Evasion = int.Parse(statLines[4].TextContent),
-                    EnergyShield = int.Parse(statLines[5].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(6)?.TextContent ?? "N/A",
-                    Type = "Boot",
-
-                };
-
-                _genericArmours.Add(armour);
-
-            });
-
-            Log("\nFinished getting evasion/energy shield boots.");
-
-        }
-
-        internal async Task GetGenericGlovesAsync()
-        {
-
-            Log("Getting armor gloves...");
-
-            var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericGlovesUrl));
-            var mainDom = dom.GetElementById("mw-content-text");
-            var gloves = mainDom.GetElementsByTagName("tbody");
-
-            var strengthBoots = gloves.FirstOrDefault().Children.Where(element => !element.TextContent.Contains("Stats"));
-
-            Parallel.ForEach(strengthBoots, glove =>
-            {
-
-                var statLines = glove.GetElementsByTagName("td");
-
-                var armour = new GenericArmour
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Strength = int.Parse(statLines[2].TextContent),
-                    Armour = int.Parse(statLines[3].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(4)?.TextContent ?? "N/A",
-                    Type = "Glove",
-
-                };
-
-                _genericArmours.Add(armour);
-
-            });
-
-            Log("\nFinished getting armor gloves.");
-            Log("Getting evasion gloves...");
-
-            var evasionBoots = gloves.ElementAtOrDefault(1).Children.Where(element => !element.TextContent.Contains("Stats"));
-
-            Parallel.ForEach(evasionBoots, glove =>
-            {
-
-                var statLines = glove.GetElementsByTagName("td");
-
-                var armour = new GenericArmour
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Dexterity = int.Parse(statLines[2].TextContent),
-                    Evasion = int.Parse(statLines[3].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(4)?.TextContent ?? "N/A",
-                    Type = "Glove",
-
-                };
-
-                _genericArmours.Add(armour);
-
-            });
-
-            Log("\nFinished getting evasion gloves.");
-            Log("Getting energy shield gloves...");
-
-            var energyShieldBoots = gloves.ElementAtOrDefault(2).Children.Where(element => !element.TextContent.Contains("Stats"));
-
-            Parallel.ForEach(energyShieldBoots, glove =>
-            {
-
-                var statLines = glove.GetElementsByTagName("td");
-
-                var armour = new GenericArmour
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Intelligence = int.Parse(statLines[2].TextContent),
-                    EnergyShield = int.Parse(statLines[3].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(4)?.TextContent ?? "N/A",
-                    Type = "Glove",
-
-                };
-
-                _genericArmours.Add(armour);
-
-            });
-
-            Log("\nFinished getting energy shield gloves.");
-            Log("Getting armour/evasion gloves...");
-
-            var armourEvasionBoots = gloves.ElementAtOrDefault(3).Children.Where(element => !element.TextContent.Contains("Stats"));
-
-            Parallel.ForEach(armourEvasionBoots, glove =>
-            {
-
-                var statLines = glove.GetElementsByTagName("td");
-
-                var armour = new GenericArmour
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Strength = int.Parse(statLines[2].TextContent),
-                    Dexterity = int.Parse(statLines[3].TextContent),
-                    Armour = int.Parse(statLines[4].TextContent),
-                    Evasion = int.Parse(statLines[5].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(6)?.TextContent ?? "N/A",
-                    Type = "Glove",
-
-                };
-
-                _genericArmours.Add(armour);
-
-            });
-
-            Log("\nFinished getting armour/evasion gloves.");
-            Log("Getting armour/energy shield gloves...");
-
-            var armourEnergyBoots = gloves.ElementAtOrDefault(4).Children.Where(element => !element.TextContent.Contains("Stats"));
-
-            Parallel.ForEach(armourEnergyBoots, glove =>
-            {
-
-                var statLines = glove.GetElementsByTagName("td");
-
-                var armour = new GenericArmour
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Strength = int.Parse(statLines[2].TextContent),
-                    Intelligence = int.Parse(statLines[3].TextContent),
-                    Armour = int.Parse(statLines[4].TextContent),
-                    EnergyShield = int.Parse(statLines[5].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(6)?.TextContent ?? "N/A",
-                    Type = "Glove",
-
-                };
-
-                _genericArmours.Add(armour);
-
-            });
-
-            Log("\nFinished getting armour/energy shield gloves.");
-            Log("Getting evasion/energy shield gloves...");
-
-            var evasionEnergyBoots = gloves.ElementAtOrDefault(5).Children.Where(element => !element.TextContent.Contains("Stats"));
-
-            Parallel.ForEach(evasionEnergyBoots, glove =>
-            {
-
-                var statLines = glove.GetElementsByTagName("td");
-
-                var armour = new GenericArmour
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Dexterity = int.Parse(statLines[2].TextContent),
-                    Intelligence = int.Parse(statLines[3].TextContent),
-                    Evasion = int.Parse(statLines[4].TextContent),
-                    EnergyShield = int.Parse(statLines[5].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(6)?.TextContent ?? "N/A",
-                    Type = "Glove",
-
-                };
-
-                _genericArmours.Add(armour);
-
-            });
-
-            Log("\nFinished getting evasion/energy shield gloves.");
-
-        }
+        //make armor methods into a single method
 
         internal void Log(string message)
             => Console.WriteLine(message);
