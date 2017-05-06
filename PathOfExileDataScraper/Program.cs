@@ -40,7 +40,7 @@ namespace PathOfExileDataScraper
         internal const string GenericWandsUrl = "/List_of_wands";
         #endregion
 
-        #region Armor
+        #region Armors
         internal const string GenericBodyArmoursUrl = "/List_of_body_armours";
         internal const string GenericBootsUrl = "/List_of_boots";
         internal const string GenericGlovesUrl = "/List_of_gloves";
@@ -48,8 +48,27 @@ namespace PathOfExileDataScraper
         internal const string GenericShieldsUrl = "/List_of_shields";
         #endregion
 
+        #region Accessories
+        internal const string GenericAmuletsUrl = "/List_of_amulets";
+        internal const string GenericRingsUrl = "/List_of_rings";
+        internal const string GenericQuiversUrl = "/List_of_quivers";
+        internal const string GenericBeltsUrl = "/List_of_belts";
+        #endregion
+
+        #region Flasks
+        internal const string GenericLifeFlasks = "/Life_Flasks";
+        internal const string GenericManaFlasks = "/Mana_Flasks";
+        internal const string GenericHybridFlasks = "/Hybrid_Flasks";
+        internal const string GenericUtilityFlasks = "/Utility_Flasks";
+        internal const string GenericCriticalUtiliyFlasks = "/Critical_Utility_Flasks";
+        #endregion
+
+        //yes, i could pass it through methods to stop persistance
+        //but i did this for clarity
         internal ConcurrentBag<GenericWeapon> _genericWeapons;
         internal ConcurrentBag<GenericArmour> _genericArmours;
+        internal ConcurrentBag<GenericAccessory> _genericAccessories;
+        internal ConcurrentBag<GenericFlask> _genericFlasks;
 
         internal async Task Start()
         {
@@ -61,12 +80,20 @@ namespace PathOfExileDataScraper
             await _connection.OpenAsync();
 
             _stopwatch.Start();
-            await GetGenericWeapons();
+            //await GetGenericWeapons();
             Log($"Getting generic weapons took {_stopwatch.Elapsed.TotalSeconds} seconds.");
             _stopwatch.Restart();
-            
-            await GetGenericArmours();
+
+            //await GetGenericArmours();
             Log($"Getting generic armours took {_stopwatch.Elapsed.TotalSeconds} seconds.");
+            _stopwatch.Restart();
+
+            //await GetGenericAccessories();
+            Log($"Getting generic accessories took {_stopwatch.Elapsed.TotalSeconds} seconds.");
+            _stopwatch.Restart();
+
+            //await GetGenericFlasks();
+            Log($"Getting generic accessories took {_stopwatch.Elapsed.TotalSeconds} seconds.");
             _stopwatch.Restart();
 
             _connection.Close();
@@ -115,7 +142,8 @@ namespace PathOfExileDataScraper
 
         internal async Task GetGenericArmours()
         {
-            
+
+            //cant use unique because of fucking two toned boots
             await _connection.ExecuteAsync("CREATE TABLE 'GenericArmours' ( " +
                 "'Name' TEXT NOT NULL, " +
                 "'LevelReq' INTEGER, " +
@@ -141,6 +169,53 @@ namespace PathOfExileDataScraper
             Log("Inserting generic armours into database...");
             await _connection.InsertAsync(_genericArmours);
             Log($"Finished inserting generic armours into database.");
+
+        }
+
+        internal async Task GetGenericAccessories()
+        {
+
+            await _connection.ExecuteAsync("CREATE TABLE 'GenericAccessories' ( " +
+                "'Name' TEXT NOT NULL, " +
+                "'LevelReq' INTEGER, " +
+                "'ImageUrl' TEXT, " +
+                "'Stats' TEXT, " +
+                "'IsCorrupted' INTEGER, " +
+                "'Type' TEXT )");
+
+            _genericAccessories = new ConcurrentBag<GenericAccessory>();
+
+            await GetGenericAcessoriesAsync(GenericAmuletsUrl, "Amulet", "amulets");
+            await GetGenericAcessoriesAsync(GenericRingsUrl, "Ring", "rings");
+            await GetGenericAcessoriesAsync(GenericQuiversUrl, "Quiver", "quivers");
+            await GetGenericAcessoriesAsync(GenericBeltsUrl, "Belt", "belts");
+
+            Log("Inserting generic accessories into database...");
+            await _connection.InsertAsync(_genericAccessories);
+            Log($"Finished inserting generic accessories into database.");
+
+        }
+
+        internal async Task GetGenericFlasks()
+        {
+
+            await _connection.ExecuteAsync("CREATE TABLE 'GenericFlasks' ( " +
+                "'Name' TEXT NOT NULL UNIQUE, " +
+                "'LevelReq' INTEGER, " +
+                "'Life' INTEGER, " +
+                "'Mana' INTEGER, " +
+                "'Duration' REAL, " +
+                "'Usage' INTEGER, " +
+                "'Capacity' INTEGER, " +
+                "'ImageUrl' TEXT, " +
+                "'BuffEffects' TEXT, " +
+                "'Stats' TEXT, " +
+                "'Type' TEXT, " +
+                "PRIMARY KEY('Name') )");
+
+            _genericFlasks = new ConcurrentBag<GenericFlask>();
+
+            await GetGenericLifeManaFlasks()
 
         }
 
@@ -799,10 +874,79 @@ namespace PathOfExileDataScraper
 
         }
 
-        internal async Task GetGenericAmuletsAsync()
+        internal async Task GetGenericAcessoriesAsync(string url, string upperCaseSingular, string lowerCasePlural)
         {
 
+            Log($"Getting {lowerCasePlural}...");
 
+            var dom = await _parser.ParseAsync(await _web.GetStringAsync(url));
+            var mainDom = dom.GetElementById("mw-content-text");
+            var accessoriesTable = mainDom.GetElementsByTagName("tbody");
+
+            var accessories = accessoriesTable.SelectMany(element => element.GetElementsByTagName("tr")).Where(element => !element.TextContent.Contains("Stats"));
+
+            Parallel.ForEach(accessories, accessory =>
+            {
+
+                var statLines = accessory.GetElementsByTagName("td");
+                var stats = statLines[2].TextContent;
+
+                var item = new GenericAccessory
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = stats.Replace("Corrupted", string.Empty),
+                    IsCorrupted = stats.Contains("Corrupted"),
+                    Type = $"{upperCaseSingular}",
+
+                };
+
+                _genericAccessories.Add(item);
+
+            });
+
+            Log($"\nFinished getting {lowerCasePlural}.");
+
+        }
+
+        internal async Task GetGenericLifeManaFlasks(string url, string upperCaseSingular, string lowerCasePlural, bool IsManaFlasks)
+        {
+
+            Log($"Getting {lowerCasePlural}...");
+
+            var dom = await _parser.ParseAsync(await _web.GetStringAsync(url));
+            var mainDom = dom.GetElementById("mw-content-text");
+            var flasksTable = mainDom.GetElementsByTagName("tbody").FirstOrDefault();
+
+            var flasks = flasksTable.GetElementsByTagName("tr").Where(element => !element.TextContent.Contains("Stats"));
+
+            Parallel.ForEach(flasks, flask =>
+            {
+
+                var statLines = flask.GetElementsByTagName("td");
+
+                var item = new GenericFlask
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Life = IsManaFlasks ? 0 : int.Parse(statLines[2].TextContent),
+                    Mana = IsManaFlasks ? int.Parse(statLines[2].TextContent) : 0,
+                    Duration = int.Parse(statLines[3].TextContent),
+                    Usage = int.Parse(statLines[4].TextContent),
+                    Capacity = int.Parse(statLines[5].TextContent),
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Type = $"{upperCaseSingular}",
+
+                };
+
+                _genericFlasks.Add(item);
+
+            });
+
+            Log($"\nFinished getting {lowerCasePlural}.");
 
         }
 
