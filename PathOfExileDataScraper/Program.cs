@@ -61,7 +61,7 @@ namespace PathOfExileDataScraper
             await _connection.OpenAsync();
 
             _stopwatch.Start();
-            //await GetGenericWeapons();
+            await GetGenericWeapons();
             Log($"Getting generic weapons took {_stopwatch.Elapsed.TotalSeconds} seconds.");
             _stopwatch.Restart();
             
@@ -99,8 +99,8 @@ namespace PathOfExileDataScraper
 
             await GetGenericAxesAsync();
             await GetGenericBowsAsync();
-            await GetGenericClawsAsync();
-            await GetGenericDaggersAsync();
+            await GetGenericClawOrDaggerAsync(GenericClawsUrl, "Claw", "claws");
+            await GetGenericClawOrDaggerAsync(GenericDaggersUrl, "Dagger", "daggers");
             await GetGenericFishingRodsAsync();
             await GetGenericMacesAsync();
             await GetGenericStavesAsync();
@@ -132,10 +132,11 @@ namespace PathOfExileDataScraper
 
             _genericArmours = new ConcurrentBag<GenericArmour>();
 
-            await GetGenericArmoursAsync(GenericBodyArmoursUrl, "Body Armour", "body armours");
-            await GetGenericArmoursAsync(GenericBodyArmoursUrl, "Boot", "boots");
-            await GetGenericArmoursAsync(GenericBodyArmoursUrl, "Glove", "gloves");
-            await GetGenericArmoursAsync(GenericBodyArmoursUrl, "Helmet", "helmets");
+            await GetGenericArmoursAsync(GenericBodyArmoursUrl, "Body Armour", "body armours", false);
+            await GetGenericArmoursAsync(GenericBodyArmoursUrl, "Boot", "boots", false);
+            await GetGenericArmoursAsync(GenericBodyArmoursUrl, "Glove", "gloves", false);
+            await GetGenericArmoursAsync(GenericBodyArmoursUrl, "Helmet", "helmets", false);
+            await GetGenericArmoursAsync(GenericShieldsUrl, "Shield", "shields", true);
 
             Log("Inserting generic armours into database...");
             await _connection.InsertAsync(_genericArmours);
@@ -256,12 +257,12 @@ namespace PathOfExileDataScraper
 
         }
 
-        internal async Task GetGenericClawsAsync()
+        internal async Task GetGenericClawOrDaggerAsync(string url, string upperCaseSingular, string lowerCasePlural)
         {
 
-            Log("Getting claws...");
+            Log($"Getting {lowerCasePlural}...");
 
-            var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericClawsUrl));
+            var dom = await _parser.ParseAsync(await _web.GetStringAsync(url));
             var mainDom = dom.GetElementById("mw-content-text");
             var weapons = mainDom.GetElementsByTagName("tbody").FirstOrDefault().Children.Where(element => !element.TextContent.Contains("DPSStats"));
 
@@ -282,8 +283,8 @@ namespace PathOfExileDataScraper
                     CritChance = statLines[6].TextContent, //i have no idea it there will always be 2 trailing digits after the .
                     DPS = double.Parse(statLines[7].TextContent),
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
-                    Type = "Claw",
+                    Stats = statLines.ElementAtOrDefault(8).TextContent,
+                    Type = $"{upperCaseSingular}",
 
                 };
 
@@ -291,46 +292,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting claws.");
-
-        }
-
-        internal async Task GetGenericDaggersAsync()
-        {
-
-            Log("Getting daggers...");
-
-            var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericDaggersUrl));
-            var mainDom = dom.GetElementById("mw-content-text");
-            var weapons = mainDom.GetElementsByTagName("tbody").FirstOrDefault().Children.Where(element => !element.TextContent.Contains("DPSStats"));
-
-            Parallel.ForEach(weapons, claw =>
-            {
-
-                var statLines = claw.GetElementsByTagName("td");
-
-                var weapon = new GenericWeapon
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Dexterity = int.Parse(statLines[2].TextContent),
-                    Intelligence = int.Parse(statLines[3].TextContent),
-                    Damage = statLines[4].TextContent,
-                    APS = double.Parse(statLines[5].TextContent),
-                    CritChance = statLines[6].TextContent, //i have no idea it there will always be 2 trailing digits after the .
-                    DPS = double.Parse(statLines[7].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
-                    Type = "Dagger",
-
-                };
-
-                _genericWeapons.Add(weapon);
-
-            });
-
-            Log("\nFinished getting daggers.");
+            Log($"\nFinished getting {lowerCasePlural}.");
 
         }
 
@@ -653,7 +615,7 @@ namespace PathOfExileDataScraper
 
         }
 
-        internal async Task GetGenericArmoursAsync(string url, string upperCaseSingular, string lowerCasePlural)
+        internal async Task GetGenericArmoursAsync(string url, string upperCaseSingular, string lowerCasePlural, bool isShield)
         {
 
             Log($"Getting armor {lowerCasePlural}...");
@@ -662,9 +624,9 @@ namespace PathOfExileDataScraper
             var mainDom = dom.GetElementById("mw-content-text");
             var armours = mainDom.GetElementsByTagName("tbody");
 
-            var strengthBodyArmours = armours.FirstOrDefault().Children.Where(element => !element.TextContent.Contains("Stats"));
+            var strengthArmours = armours.FirstOrDefault().Children.Where(element => !element.TextContent.Contains("Stats"));
 
-            Parallel.ForEach(strengthBodyArmours, armor =>
+            Parallel.ForEach(strengthArmours, armor =>
             {
 
                 var statLines = armor.GetElementsByTagName("td");
@@ -676,8 +638,9 @@ namespace PathOfExileDataScraper
                     LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
                     Strength = int.Parse(statLines[2].TextContent),
                     Armour = int.Parse(statLines[3].TextContent),
+                    BlockChance = isShield ? statLines[4].TextContent : "N/A",
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(4)?.TextContent ?? "N/A",
+                    Stats = isShield ? statLines.ElementAtOrDefault(5).TextContent : statLines.ElementAtOrDefault(4).TextContent,
                     Type = $"{upperCaseSingular}",
 
                 };
@@ -689,9 +652,9 @@ namespace PathOfExileDataScraper
             Log($"\nFinished getting armor {lowerCasePlural}.");
             Log($"Getting evasion {lowerCasePlural}...");
 
-            var evasionBodyArmours = armours.ElementAtOrDefault(1).Children.Where(element => !element.TextContent.Contains("Stats"));
+            var evasionArmours = armours.ElementAtOrDefault(1).Children.Where(element => !element.TextContent.Contains("Stats"));
 
-            Parallel.ForEach(evasionBodyArmours, armor =>
+            Parallel.ForEach(evasionArmours, armor =>
             {
 
                 var statLines = armor.GetElementsByTagName("td");
@@ -703,8 +666,9 @@ namespace PathOfExileDataScraper
                     LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
                     Dexterity = int.Parse(statLines[2].TextContent),
                     Evasion = int.Parse(statLines[3].TextContent),
+                    BlockChance = isShield ? statLines[4].TextContent : "N/A",
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(4)?.TextContent ?? "N/A",
+                    Stats = isShield ? statLines.ElementAtOrDefault(5).TextContent : statLines.ElementAtOrDefault(4).TextContent,
                     Type = $"{upperCaseSingular}",
 
                 };
@@ -730,8 +694,9 @@ namespace PathOfExileDataScraper
                     LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
                     Intelligence = int.Parse(statLines[2].TextContent),
                     EnergyShield = int.Parse(statLines[3].TextContent),
+                    BlockChance = isShield ? statLines[4].TextContent : "N/A",
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(4)?.TextContent ?? "N/A",
+                    Stats = isShield ? statLines.ElementAtOrDefault(5).TextContent : statLines.ElementAtOrDefault(4).TextContent,
                     Type = $"{upperCaseSingular}",
 
                 };
@@ -759,8 +724,9 @@ namespace PathOfExileDataScraper
                     Dexterity = int.Parse(statLines[3].TextContent),
                     Armour = int.Parse(statLines[4].TextContent),
                     Evasion = int.Parse(statLines[5].TextContent),
+                    BlockChance = isShield ? statLines[6].TextContent : "N/A",
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(6)?.TextContent ?? "N/A",
+                    Stats = isShield ? statLines.ElementAtOrDefault(7).TextContent : statLines.ElementAtOrDefault(6).TextContent,
                     Type = $"{upperCaseSingular}",
 
                 };
@@ -788,8 +754,9 @@ namespace PathOfExileDataScraper
                     Intelligence = int.Parse(statLines[3].TextContent),
                     Armour = int.Parse(statLines[4].TextContent),
                     EnergyShield = int.Parse(statLines[5].TextContent),
+                    BlockChance = isShield ? statLines[6].TextContent : "N/A",
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(6)?.TextContent ?? "N/A",
+                    Stats = isShield ? statLines.ElementAtOrDefault(7).TextContent : statLines.ElementAtOrDefault(6).TextContent,
                     Type = $"{upperCaseSingular}",
 
                 };
@@ -817,8 +784,9 @@ namespace PathOfExileDataScraper
                     Intelligence = int.Parse(statLines[3].TextContent),
                     Evasion = int.Parse(statLines[4].TextContent),
                     EnergyShield = int.Parse(statLines[5].TextContent),
+                    BlockChance = isShield ? statLines[6].TextContent : "N/A",
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(6)?.TextContent ?? "N/A",
+                    Stats = isShield ? statLines.ElementAtOrDefault(7).TextContent : statLines.ElementAtOrDefault(6).TextContent,
                     Type = $"{upperCaseSingular}",
 
                 };
@@ -827,11 +795,16 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log($"\nFinished getting evasion/energy shield body armour.");
+            Log($"\nFinished getting evasion/energy shield {lowerCasePlural}.");
 
         }
 
-        //make armor methods into a single method
+        internal async Task GetGenericAmuletsAsync()
+        {
+
+
+
+        }
 
         internal void Log(string message)
             => Console.WriteLine(message);

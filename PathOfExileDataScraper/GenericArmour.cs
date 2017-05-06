@@ -21,7 +21,7 @@ namespace PathOfExileDataScraper
         public int Armour { get; set; } = 0;
         public int Evasion { get; set; } = 0;
         public int EnergyShield { get; set; } = 0;
-        public string BlockChance { get; set; } = "0%";
+        public string BlockChance { get; set; } = "N/A";
         public string ImageUrl { get; set; }
         public string Stats { get; set; } = "N/A";
         public string Type { get; set; }
