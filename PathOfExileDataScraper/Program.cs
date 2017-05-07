@@ -11,6 +11,8 @@ using System.Threading;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
+using AngleSharp.Dom.Html;
 
 namespace PathOfExileDataScraper
 {
@@ -38,7 +40,7 @@ namespace PathOfExileDataScraper
         internal const string GenericStavesUrl = "/List_of_staves"; //aka staff
         internal const string GenericSwordsUrl = "/List_of_swords";
         internal const string GenericWandsUrl = "/List_of_wands";
-        #endregion
+        #endregion Weapons
 
         #region Armors
         internal const string GenericBodyArmoursUrl = "/List_of_body_armours";
@@ -46,14 +48,14 @@ namespace PathOfExileDataScraper
         internal const string GenericGlovesUrl = "/List_of_gloves";
         internal const string GenericHelmetsUrl = "/List_of_helmets";
         internal const string GenericShieldsUrl = "/List_of_shields";
-        #endregion
+        #endregion Armors
 
         #region Accessories
         internal const string GenericAmuletsUrl = "/List_of_amulets";
         internal const string GenericRingsUrl = "/List_of_rings";
         internal const string GenericQuiversUrl = "/List_of_quivers";
         internal const string GenericBeltsUrl = "/List_of_belts";
-        #endregion
+        #endregion Accessories
 
         #region Flasks
         internal const string GenericLifeFlasks = "/Life_Flasks";
@@ -61,7 +63,12 @@ namespace PathOfExileDataScraper
         internal const string GenericHybridFlasks = "/Hybrid_Flasks";
         internal const string GenericUtilityFlasks = "/Utility_Flasks";
         internal const string GenericCriticalUtiliyFlasks = "/Critical_Utility_Flasks";
-        #endregion
+        #endregion Flasks
+
+        #region Uniques
+        internal const string UniqueWeaponsUrl = "/List_of_unique_weapons";
+        internal const string UniqueAccessoriesUrl = "/List_of_unique_accessories";
+        #endregion Uniques
 
         //yes, i could pass it through methods to stop persistance
         //but i did this for clarity
@@ -69,6 +76,7 @@ namespace PathOfExileDataScraper
         internal ConcurrentBag<GenericArmour> _genericArmours;
         internal ConcurrentBag<GenericAccessory> _genericAccessories;
         internal ConcurrentBag<GenericFlask> _genericFlasks;
+        internal ConcurrentBag<UniqueWeapon> _uniqueWeapons;
 
         internal async Task Start()
         {
@@ -124,7 +132,14 @@ namespace PathOfExileDataScraper
 
             _genericWeapons = new ConcurrentBag<GenericWeapon>();
 
-            await GetGenericAxesAsync();
+            var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericAxesUrl));
+            await GetGenericAxesSwordsAsync(dom, "One Handed Axe", "one handed axes", 0);
+            await GetGenericAxesSwordsAsync(dom, "Two Handed Axe", "two handed axes", 1);
+
+            dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericSwordsUrl));
+            await GetGenericAxesSwordsAsync(dom, "One Handed Sword", "one handed swords", 0);
+            await GetGenericAxesSwordsAsync(dom, "Two Handed Sword", "two handed swords", 2);
+
             await GetGenericBowsAsync();
             await GetGenericClawOrDaggerAsync(GenericClawsUrl, "Claw", "claws");
             await GetGenericClawOrDaggerAsync(GenericDaggersUrl, "Dagger", "daggers");
@@ -215,20 +230,53 @@ namespace PathOfExileDataScraper
 
             _genericFlasks = new ConcurrentBag<GenericFlask>();
 
-            await GetGenericLifeManaFlasks()
+            await GetGenericLifeManaFlasks(GenericLifeFlasks, "Life Flask", "life flasks", false);
+            await GetGenericLifeManaFlasks(GenericManaFlasks, "Mana Flask", "mana flasks", true);
+            await GetGenericUtilityFlasks(GenericUtilityFlasks);
+            await GetGenericUtilityFlasks(GenericCriticalUtiliyFlasks);
+
+            Log("Inserting generic flasks into database...");
+            await _connection.InsertAsync(_genericFlasks);
+            Log($"Finished inserting generic flasks into database.");
 
         }
 
-        internal async Task GetGenericAxesAsync()
+        internal async Task GetUniqueWeapons()
         {
 
-            var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericAxesUrl));
+            await _connection.ExecuteAsync("CREATE TABLE 'UniqueWeapons' ( " +
+                "'Name' TEXT NOT NULL UNIQUE, " +
+                "'LevelReq' INTEGER, " +
+                "'Life' INTEGER, " +
+                "'Mana' INTEGER, " +
+                "'Duration' REAL, " +
+                "'Usage' INTEGER, " +
+                "'Capacity' INTEGER, " +
+                "'ImageUrl' TEXT, " +
+                "'BuffEffects' TEXT, " +
+                "'Stats' TEXT, " +
+                "'Type' TEXT, " +
+                "PRIMARY KEY('Name') )");
+
+            _uniqueWeapons = new ConcurrentBag<UniqueWeapon>();
+
+
+
+            Log("Inserting generic flasks into database...");
+            await _connection.InsertAsync(_uniqueWeapons);
+            Log($"Finished inserting generic flasks into database.");
+
+        }
+
+        internal Task GetGenericAxesSwordsAsync(IHtmlDocument dom, string upperCaseSingular, string lowerCasePlural, int tableToUse)
+        {
+            
             var mainDom = dom.GetElementById("mw-content-text");
             var tables = mainDom.GetElementsByTagName("table");
 
-            var oneHandedAxes = tables.FirstOrDefault().GetElementsByTagName("tbody").FirstOrDefault().Children.Where(element => !element.TextContent.Contains("DPSStats")); //.Where(e => e.TextContent != "ItemDamageAPSCritDPSStats");
+            var oneHandedAxes = tables.ElementAtOrDefault(tableToUse).GetElementsByTagName("tbody").FirstOrDefault().Children.Where(element => !element.TextContent.Contains("DPSStats")); //.Where(e => e.TextContent != "ItemDamageAPSCritDPSStats");
 
-            Log("Getting one handed axes...");
+            Log($"Getting {lowerCasePlural}...");
 
             Parallel.ForEach(oneHandedAxes, axe =>
             {
@@ -248,7 +296,7 @@ namespace PathOfExileDataScraper
                     DPS = double.Parse(statLines[7].TextContent),
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Stats = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
-                    Type = "One Handed Axe",
+                    Type = upperCaseSingular,
 
                 };
 
@@ -256,39 +304,9 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting one handed axes.");
+            Log($"Finished getting {lowerCasePlural}.");
 
-            var twoHandedAxes = tables.ElementAtOrDefault(1).GetElementsByTagName("tbody").FirstOrDefault().Children.Where(element => !element.TextContent.Contains("Stats"));
-
-            Log("Getting two handed axes...");
-
-            Parallel.ForEach(twoHandedAxes, axe =>
-            {
-
-                var statLines = axe.GetElementsByTagName("td");
-
-                var weapon = new GenericWeapon
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Strength = int.Parse(statLines[2].TextContent),
-                    Dexterity = int.Parse(statLines[3].TextContent),
-                    Damage = statLines[4].TextContent,
-                    APS = double.Parse(statLines[5].TextContent),
-                    CritChance = statLines[6].TextContent, //i have no idea it there will always be 2 trailing digits after the .
-                    DPS = double.Parse(statLines[7].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
-                    Type = "Two Handed Axe",
-
-                };
-
-                _genericWeapons.Add(weapon);
-
-            });
-
-            Log("\nFinished getting two handed axes.");
+            return Task.CompletedTask;
 
         }
 
@@ -328,7 +346,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting bows.");
+            Log("Finished getting bows.");
 
         }
 
@@ -367,7 +385,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log($"\nFinished getting {lowerCasePlural}.");
+            Log($"Finished getting {lowerCasePlural}.");
 
         }
 
@@ -403,7 +421,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting fishing rods.");
+            Log("Finished getting fishing rods.");
 
         }
 
@@ -443,7 +461,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting one handed maces.");
+            Log("Finished getting one handed maces.");
             Log("Getting sceptres...");
 
             var spectres = weapons.ElementAtOrDefault(1).Children.Where(element => !element.TextContent.Contains("DPSStats"));
@@ -474,7 +492,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting sceptres.");
+            Log("Finished getting sceptres.");
             Log("Getting two handed maces...");
 
             var twoHandedMaces = weapons.ElementAtOrDefault(2).Children.Where(element => !element.TextContent.Contains("DPSStats"));
@@ -504,7 +522,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting two handed maces.");
+            Log("Finished getting two handed maces.");
 
         }
 
@@ -545,7 +563,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting staves.");
+            Log("Finished getting staves.");
 
         }
 
@@ -585,7 +603,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting one handed swords.");
+            Log("Finished getting one handed swords.");
             Log("Getting thrusting one handed swords...");
 
             var thrustingSwords = weapons.ElementAtOrDefault(1).Children.Where(element => !element.TextContent.Contains("DPSStats"));
@@ -615,7 +633,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting thrusting one handed swords.");
+            Log("Finished getting thrusting one handed swords.");
             Log("Getting two handed swords...");
 
             var twoHandedSwords = weapons.ElementAtOrDefault(2).Children.Where(element => !element.TextContent.Contains("DPSStats"));
@@ -646,7 +664,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting two handed swords.");
+            Log("Finished getting two handed swords.");
 
         }
 
@@ -686,7 +704,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("\nFinished getting wands.");
+            Log("Finished getting wands.");
 
         }
 
@@ -724,7 +742,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log($"\nFinished getting armor {lowerCasePlural}.");
+            Log($"Finished getting armor {lowerCasePlural}.");
             Log($"Getting evasion {lowerCasePlural}...");
 
             var evasionArmours = armours.ElementAtOrDefault(1).Children.Where(element => !element.TextContent.Contains("Stats"));
@@ -752,7 +770,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log($"\nFinished getting evasion {lowerCasePlural}.");
+            Log($"Finished getting evasion {lowerCasePlural}.");
             Log($"Getting energy shield {lowerCasePlural}...");
 
             var energyShieldArmours = armours.ElementAtOrDefault(2).Children.Where(element => !element.TextContent.Contains("Stats"));
@@ -780,7 +798,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log($"\nFinished getting energy shield {lowerCasePlural}.");
+            Log($"Finished getting energy shield {lowerCasePlural}.");
             Log($"Getting armour/evasion {lowerCasePlural}...");
 
             var armourEvasionArmours = armours.ElementAtOrDefault(3).Children.Where(element => !element.TextContent.Contains("Stats"));
@@ -810,7 +828,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log($"\nFinished getting armour/evasion {lowerCasePlural}.");
+            Log($"Finished getting armour/evasion {lowerCasePlural}.");
             Log($"Getting armour/energy shield {lowerCasePlural}...");
 
             var armourEnergyArmours = armours.ElementAtOrDefault(4).Children.Where(element => !element.TextContent.Contains("Stats"));
@@ -840,7 +858,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log($"\nFinished getting armour/energy shield {lowerCasePlural}.");
+            Log($"Finished getting armour/energy shield {lowerCasePlural}.");
             Log($"Getting evasion/energy shield {lowerCasePlural}...");
 
             var evasionEnergyArmours = armours.ElementAtOrDefault(5).Children.Where(element => !element.TextContent.Contains("Stats"));
@@ -870,7 +888,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log($"\nFinished getting evasion/energy shield {lowerCasePlural}.");
+            Log($"Finished getting evasion/energy shield {lowerCasePlural}.");
 
         }
 
@@ -907,7 +925,7 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log($"\nFinished getting {lowerCasePlural}.");
+            Log($"Finished getting {lowerCasePlural}.");
 
         }
 
@@ -920,7 +938,7 @@ namespace PathOfExileDataScraper
             var mainDom = dom.GetElementById("mw-content-text");
             var flasksTable = mainDom.GetElementsByTagName("tbody").FirstOrDefault();
 
-            var flasks = flasksTable.GetElementsByTagName("tr").Where(element => !element.TextContent.Contains("Stats"));
+            var flasks = flasksTable.GetElementsByTagName("tr").Where(element => !element.TextContent.Contains("Capacity"));
 
             Parallel.ForEach(flasks, flask =>
             {
@@ -934,7 +952,7 @@ namespace PathOfExileDataScraper
                     LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
                     Life = IsManaFlasks ? 0 : int.Parse(statLines[2].TextContent),
                     Mana = IsManaFlasks ? int.Parse(statLines[2].TextContent) : 0,
-                    Duration = int.Parse(statLines[3].TextContent),
+                    Duration = double.Parse(statLines[3].TextContent),
                     Usage = int.Parse(statLines[4].TextContent),
                     Capacity = int.Parse(statLines[5].TextContent),
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
@@ -946,15 +964,90 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log($"\nFinished getting {lowerCasePlural}.");
+            Log($"Finished getting {lowerCasePlural}.");
+
+        }
+
+        internal async Task GetGenericHybridFlasks()
+        {
+
+            Log($"Getting hybrid flasks...");
+
+            var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericUtilityFlasks));
+            var mainDom = dom.GetElementById("mw-content-text");
+            var flasksTable = mainDom.GetElementsByTagName("tbody").FirstOrDefault();
+
+            var flasks = flasksTable.GetElementsByTagName("tr").Where(element => !element.TextContent.Contains("Capacity"));
+
+            Parallel.ForEach(flasks, flask =>
+            {
+
+                var statLines = flask.GetElementsByTagName("td");
+
+                var item = new GenericFlask
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Life = int.Parse(statLines[2].TextContent),
+                    Mana = int.Parse(statLines[3].TextContent),
+                    Duration = double.Parse(statLines[4].TextContent),
+                    Usage = int.Parse(statLines[5].TextContent),
+                    Capacity = int.Parse(statLines[6].TextContent),
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Type = $"Hybrid Flask",
+
+                };
+
+                _genericFlasks.Add(item);
+
+            });
+
+            Log($"Finished getting hybrid flasks.");
+
+        }
+
+        internal async Task GetGenericUtilityFlasks(string url)
+        {
+
+            Log($"Getting utility flasks...");
+
+            var dom = await _parser.ParseAsync(await _web.GetStringAsync(url));
+            var mainDom = dom.GetElementById("mw-content-text");
+            var flasksTable = mainDom.GetElementsByTagName("tbody").FirstOrDefault();
+
+            var flasks = flasksTable.GetElementsByTagName("tr").Where(element => !element.TextContent.Contains("Capacity"));
+
+            Parallel.ForEach(flasks, new ParallelOptions { MaxDegreeOfParallelism = 1 }, flask =>
+            {
+
+                var statLines = flask.GetElementsByTagName("td");
+
+                var item = new GenericFlask
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Duration = double.Parse(statLines[2].TextContent),
+                    Usage = int.Parse(statLines[3].TextContent),
+                    Capacity = int.Parse(statLines[4].TextContent),
+                    BuffEffects = Regex.Replace(statLines[5].InnerHtml.Replace("<br>", "\\n"), "<.*?>", string.Empty),
+                    Stats = statLines[6].TextContent,
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Type = $"Utility Flask",
+
+                };
+
+                _genericFlasks.Add(item);
+
+            });
+
+            Log($"Finished getting utility flasks.");
 
         }
 
         internal void Log(string message)
-            => Console.WriteLine(message);
-
-        internal void InLineLog(string message)
-            => Console.Write($"\r{message}");
+            => Console.WriteLine($"{DateTime.Now} {message}");
 
     }
 
