@@ -147,7 +147,9 @@ namespace PathOfExileDataScraper
 
             await GetUniqueMaps();
             Log($"Getting unique maps took {_stopwatch.Elapsed.TotalSeconds} seconds.");
-            _stopwatch.Restart();
+            _stopwatch.Reset();
+
+            await new InfoScraper().Run(_connection, _web, _parser, _stopwatch);
 
             _connection.Close();
 
