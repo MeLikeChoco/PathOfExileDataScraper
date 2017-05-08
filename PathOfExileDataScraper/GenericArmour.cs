@@ -18,9 +18,9 @@ namespace PathOfExileDataScraper
         public int Strength { get; set; } = 0;
         public int Dexterity { get; set; } = 0;
         public int Intelligence { get; set; } = 0;
-        public int Armour { get; set; } = 0;
-        public int Evasion { get; set; } = 0;
-        public int EnergyShield { get; set; } = 0;
+        public string Armour { get; set; } = "0";
+        public string Evasion { get; set; } = "0";
+        public string EnergyShield { get; set; } = "0";
         public string BlockChance { get; set; } = "N/A";
         public string ImageUrl { get; set; }
         public string Stats { get; set; } = "N/A";

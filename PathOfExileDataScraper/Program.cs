@@ -13,6 +13,11 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using AngleSharp.Dom.Html;
+using System.IO;
+using System.Reflection;
+
+//I tried so hard to reduce the lines of code needed that now I'm scared to the fact that I may not
+//even remember what some parts even do after taking a break from this.
 
 namespace PathOfExileDataScraper
 {
@@ -25,7 +30,6 @@ namespace PathOfExileDataScraper
         internal const string InMemoryDb = "Data Source = :memory:";
         internal const string FlatFileDb = "Data Source = PathOfExile.db";
         SqliteConnection _connection;
-
         internal HttpClient _web;
         internal HtmlParser _parser;
         internal Stopwatch _stopwatch;
@@ -67,7 +71,9 @@ namespace PathOfExileDataScraper
 
         #region Uniques
         internal const string UniqueWeaponsUrl = "/List_of_unique_weapons";
+        internal const string UniqueArmoursUrl = "/List_of_unique_armour";
         internal const string UniqueAccessoriesUrl = "/List_of_unique_accessories";
+        internal const string UniqueFlasksUrl = "/List_of_unique_flasks";
         #endregion Uniques
 
         //yes, i could pass it through methods to stop persistance
@@ -77,13 +83,18 @@ namespace PathOfExileDataScraper
         internal ConcurrentBag<GenericAccessory> _genericAccessories;
         internal ConcurrentBag<GenericFlask> _genericFlasks;
         internal ConcurrentBag<UniqueWeapon> _uniqueWeapons;
+        internal ConcurrentBag<UniqueArmour> _uniqueArmours;
+        internal ConcurrentBag<UniqueAccessory> _uniqueAccessories;
+        internal ConcurrentBag<UniqueFlask> _uniqueFlasks;
 
         internal async Task Start()
         {
 
+            Log("Path of Exile Data Scraper");
             _web = new HttpClient { BaseAddress = new Uri("http://pathofexile.gamepedia.com") };
             _parser = new HtmlParser();
             _stopwatch = new Stopwatch();
+
             _connection = new SqliteConnection(FlatFileDb);
             await _connection.OpenAsync();
 
@@ -104,6 +115,22 @@ namespace PathOfExileDataScraper
             Log($"Getting generic accessories took {_stopwatch.Elapsed.TotalSeconds} seconds.");
             _stopwatch.Restart();
 
+            //await GetUniqueWeapons();
+            Log($"Getting unique weapons took {_stopwatch.Elapsed.TotalSeconds} seconds.");
+            _stopwatch.Restart();
+
+            //await GetUniqueArmours();
+            Log($"Getting unique armours took {_stopwatch.Elapsed.TotalSeconds} seconds.");
+            _stopwatch.Restart();
+
+            //await GetUniqueAccessories();
+            Log($"Getting unique accessories took {_stopwatch.Elapsed.TotalSeconds} seconds.");
+            _stopwatch.Restart();
+
+            await GetUniqueFlasks();
+            Log($"Getting unique flasks took {_stopwatch.Elapsed.TotalSeconds} seconds.");
+            _stopwatch.Restart();
+
             _connection.Close();
 
             Console.ReadKey();
@@ -120,11 +147,9 @@ namespace PathOfExileDataScraper
                 "'Dexterity' INTEGER, " +
                 "'Intelligence' INTEGER, " +
                 "'Damage' TEXT, " +
-                "'APS' REAL, " +
+                "'APS' TEXT, " +
                 "'CritChance' TEXT, " +
-                "'PDPS' REAL, " +
-                "'EDPS' REAL, " +
-                "'DPS' REAL, " +
+                "'DPS' TEXT, " +
                 "'Stats' TEXT, " +
                 "'ImageUrl' TEXT, " +
                 "'Type' TEXT, " +
@@ -132,21 +157,29 @@ namespace PathOfExileDataScraper
 
             _genericWeapons = new ConcurrentBag<GenericWeapon>();
 
+
             var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericAxesUrl));
             await GetGenericAxesSwordsAsync(dom, "One Handed Axe", "one handed axes", 0);
             await GetGenericAxesSwordsAsync(dom, "Two Handed Axe", "two handed axes", 1);
 
             dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericSwordsUrl));
             await GetGenericAxesSwordsAsync(dom, "One Handed Sword", "one handed swords", 0);
+            await GetGenericBowsThrustingSwordsAsync(dom, "Thrusting One Handed Sword", "thrusting one handed swords", 1);
             await GetGenericAxesSwordsAsync(dom, "Two Handed Sword", "two handed swords", 2);
 
-            await GetGenericBowsAsync();
+            dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericBowsUrl));
+            await GetGenericBowsThrustingSwordsAsync(dom, "Bow", "bows", 0);
+
+            dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericMacesUrl));
+            await GetGenericMacesAsync(dom, "One Handed Mace", "one handed maces", 0);
+            await GetGenericStavesSceptresAsync(dom, "Sceptre", "sceptres", 1);
+            await GetGenericMacesAsync(dom, "Two Handed Mace", "two handed maces", 2);
+
+            dom.Dispose();
+
             await GetGenericClawOrDaggerAsync(GenericClawsUrl, "Claw", "claws");
             await GetGenericClawOrDaggerAsync(GenericDaggersUrl, "Dagger", "daggers");
             await GetGenericFishingRodsAsync();
-            await GetGenericMacesAsync();
-            await GetGenericStavesAsync();
-            await GetGenericSwordsAsync();
             await GetGenericWandsAsync();
 
             Log("Inserting generic weapons into database...");
@@ -165,10 +198,10 @@ namespace PathOfExileDataScraper
                 "'Strength' INTEGER, " +
                 "'Dexterity' INTEGER, " +
                 "'Intelligence' INTEGER, " +
-                "'Armour' INTEGER, " +
-                "'Evasion' INTEGER, " +
-                "'EnergyShield' INTEGER, " +
-                "'BlockChance' INTEGER, " +
+                "'Armour' TEXT, " +
+                "'Evasion' TEXT, " +
+                "'EnergyShield' TEXT, " +
+                "'BlockChance' TEXT, " +
                 "'Stats' TEXT, " +
                 "'ImageUrl' TEXT, " +
                 "'Type' TEXT )");
@@ -217,11 +250,11 @@ namespace PathOfExileDataScraper
             await _connection.ExecuteAsync("CREATE TABLE 'GenericFlasks' ( " +
                 "'Name' TEXT NOT NULL UNIQUE, " +
                 "'LevelReq' INTEGER, " +
-                "'Life' INTEGER, " +
-                "'Mana' INTEGER, " +
-                "'Duration' REAL, " +
-                "'Usage' INTEGER, " +
-                "'Capacity' INTEGER, " +
+                "'Life' TEXT, " +
+                "'Mana' TEXT, " +
+                "'Duration' TEXT, " +
+                "'Usage' TEXT, " +
+                "'Capacity' TEXT, " +
                 "'ImageUrl' TEXT, " +
                 "'BuffEffects' TEXT, " +
                 "'Stats' TEXT, " +
@@ -244,33 +277,179 @@ namespace PathOfExileDataScraper
         internal async Task GetUniqueWeapons()
         {
 
-            await _connection.ExecuteAsync("CREATE TABLE 'UniqueWeapons' ( " +
+            await _connection.ExecuteAsync("CREATE TABLE 'UniqueWeapons'(" +
                 "'Name' TEXT NOT NULL UNIQUE, " +
                 "'LevelReq' INTEGER, " +
-                "'Life' INTEGER, " +
-                "'Mana' INTEGER, " +
-                "'Duration' REAL, " +
-                "'Usage' INTEGER, " +
-                "'Capacity' INTEGER, " +
-                "'ImageUrl' TEXT, " +
-                "'BuffEffects' TEXT, " +
+                "'Strength' INTEGER, " +
+                "'Dexterity' INTEGER, " +
+                "'Intelligence' INTEGER, " +
+                "'Damage' TEXT, " +
+                "'APS' TEXT, " +
+                "'CritChance' TEXT, " +
+                "'PDPS' TEXT, " +
+                "'EDPS' TEXT, " +
+                "'DPS' TEXT, " +
                 "'Stats' TEXT, " +
+                "'ImageUrl' TEXT, " +
                 "'Type' TEXT, " +
-                "PRIMARY KEY('Name') )");
+                "PRIMARY KEY('Name') )"); ;
 
             _uniqueWeapons = new ConcurrentBag<UniqueWeapon>();
 
+            var dom = await _parser.ParseAsync(await _web.GetStringAsync(UniqueWeaponsUrl));
+            var tables = dom.GetElementById("mw-content-text").GetElementsByTagName("tbody");
 
+            await GetUniqueStrDexWeaponsAsync(tables[0], "One Handed Axe", "one handed axes");
+            await GetUniqueStrDexWeaponsAsync(tables[1], "Two Handed Axe", "two handed axes");
+            await GetUniqueStrDexWeaponsAsync(tables[5], "Fishing Rod", "fishing rods");
+            await GetUniqueStrDexWeaponsAsync(tables[9], "One Handed Sword", "one handed swords");
+            await GetUniqueStrDexWeaponsAsync(tables[11], "Two Handed Sword", "two handed swords");
+
+            await GetUniqueDexWeaponsAsync(tables[2], "Bow", "bows");
+            await GetUniqueDexWeaponsAsync(tables[10], "Thrusting One Handed Sword", "thrusting one handed swords");
+
+            await GetUniqueDexIntelWeaponsAsync(tables[3], "Claw", "claws");
+            await GetUniqueDexIntelWeaponsAsync(tables[4], "Dagger", "daggers");
+
+            await GetUniqueStrWeaponsAsync(tables[6], "One Handed Mace", "one handed maces");
+            await GetUniqueStrWeaponsAsync(tables[8], "Two Handed Mace", "two handed maces");
+
+            await GetUniqueStrIntelWeaponsAsync(tables[7], "Sceptre", "sceptres");
+            await GetUniqueStrIntelWeaponsAsync(tables[12], "Staff", "staves");
+
+            await GetUniqueIntelWeaponsAsync(tables[13], "Wand", "wands");
+
+            Log("Inserting unique weapons into database...");
+            await _connection.InsertAsync(_uniqueWeapons);
+            Log($"Finished inserting unique weapons into database.");
+
+        }
+
+        internal async Task GetUniqueArmours()
+        {
+
+            await _connection.ExecuteAsync("CREATE TABLE 'UniqueArmours' ( " +
+                "'Name' TEXT NOT NULL, " +
+                "'LevelReq' INTEGER, " +
+                "'Strength' INTEGER, " +
+                "'Dexterity' INTEGER, " +
+                "'Intelligence' INTEGER, " +
+                "'Armour' TEXT, " +
+                "'Evasion' TEXT, " +
+                "'EnergyShield' TEXT, " +
+                "'BlockChance' TEXT, " +
+                "'Stats' TEXT, " +
+                "'ImageUrl' TEXT, " +
+                "'Type' TEXT )");
+
+            _uniqueArmours = new ConcurrentBag<UniqueArmour>();
+
+            var dom = await _parser.ParseAsync(await _web.GetStringAsync(UniqueArmoursUrl));
+            var tables = dom.GetElementById("mw-content-text").GetElementsByTagName("tbody").Where(element => element.Children.Length > 1).ToArray(); //make sure it doesnt just contain the label
+            var typesOfArmourSingular = new string[] { "Body Armour", "Boot", "Glove", "Helmet" };
+            var typesOfArmourPlural = new string[] { "body armours", "boots", "gloves", "helmets" };
+            var singleAttributeTableGroups = new int[] { 0, 7, 13, 20 }; //represents where each of the singlar attribute armor tables start
+            var doubleAttributeTableGroups = new int[] { 3, 10, 16, 23 };
+
+            for (int index = 0; index < 4; index++)
+            {
+
+                var i = singleAttributeTableGroups[index];
+                var s = typesOfArmourSingular[index];
+                var p = typesOfArmourPlural[index];
+
+                await GetSingleAttributeArmoursAsync(tables[i], "Strength", "Armour", s, p);
+                await GetSingleAttributeArmoursAsync(tables[i + 1], "Dexterity", "Evasion", s, p);
+                await GetSingleAttributeArmoursAsync(tables[i + 2], "Intelligence", "EnergyShield", s, p);
+
+            }
+
+            for (int index = 0; index < 4; index++)
+            {
+
+                var i = doubleAttributeTableGroups[index];
+                var s = typesOfArmourSingular[index];
+                var p = typesOfArmourPlural[index];
+
+                await GetDoubleAttributeArmoursAsync(tables[i], "Strength", "Dexterity", "Armour", "Evasion", s, p);
+                await GetDoubleAttributeArmoursAsync(tables[i], "Strength", "Intelligence", "Armour", "EnergyShield", s, p);
+                await GetDoubleAttributeArmoursAsync(tables[i], "Dexterity", "Intelligence", "Evasion", "EnergyShield", s, p);
+
+            }
+
+            await GetTripleAttributeArmoursAsync(tables[6], typesOfArmourSingular[0], typesOfArmourPlural[0]);
+            
+            Log("Inserting unique armours into database...");
+            await _connection.InsertAsync(_uniqueArmours);
+            Log($"Finished inserting unique armours into database.");
+
+        }
+
+        internal async Task GetUniqueAccessories()
+        {
+
+            await _connection.ExecuteAsync("CREATE TABLE 'UniqueAccessories' ( " +
+                "'Name' TEXT NOT NULL, " +
+                "'LevelReq' INTEGER, " +
+                "'Stats' TEXT, " +
+                "'IsCorrupted' INTEGER, " +
+                "'ImageUrl' TEXT, " +
+                "'Type' TEXT )");
+
+            _uniqueAccessories = new ConcurrentBag<UniqueAccessory>();
+
+            var dom = await _parser.ParseAsync(await _web.GetStringAsync(UniqueAccessoriesUrl));
+            var tables = dom.GetElementById("mw-content-text").GetElementsByTagName("tbody");
+
+            await GetUniqueAccessoriesAsync(tables[0], "Amulet", "amulets");
+            await GetUniqueAccessoriesAsync(tables[1], "Belt", "belts");
+            await GetUniqueAccessoriesAsync(tables[2], "Ring", "rings");
+            await GetUniqueAccessoriesAsync(tables[3], "Quiver", "quivers");
+            await GetUniqueAccessoriesAsync(tables[4], "Quiver", "quivers"); //i have no clue why there's a random quiver by itself here
+            
+            Log("Inserting unique accessories into database...");
+            await _connection.InsertAsync(_uniqueAccessories);
+            Log($"Finished inserting unique accessories into database.");
+
+        }
+
+        internal async Task GetUniqueFlasks()
+        {
+
+            await _connection.ExecuteAsync("CREATE TABLE 'UniqueFlasks' ( " +
+                "'Name' TEXT NOT NULL, " +
+                "'LevelReq' TEXT, " +
+                "'Life' TEXT, " +
+                "'Mana' TEXT, " +
+                "'Duration' TEXT, " +
+                "'Usage' TEXT, " +
+                "'Capacity' TEXT, " +
+                "'ImageUrl' TEXT, " +
+                "'BuffEffects' TEXT, " +
+                "'Stats' TEXT, " +
+                "'Type' TEXT )");
+
+            _uniqueFlasks = new ConcurrentBag<UniqueFlask>();
+
+            var dom = await _parser.ParseAsync(await _web.GetStringAsync(UniqueFlasksUrl));
+            var tables = dom.GetElementById("mw-content-text").GetElementsByTagName("tbody");
+
+            //possible way to shorten: use counters
+            await GetUniqueLifeManaFlasksAsync(tables[0], "Life Flask", "life flasks", false);
+            await GetUniqueLifeManaFlasksAsync(tables[1], "Mana Flask", "mana flasks", true);
+            await GetUniqueHybridFlasksAsync(tables[2]);
+            await GetUniqueUtilityFlasksAsync(tables[3]);
 
             Log("Inserting generic flasks into database...");
-            await _connection.InsertAsync(_uniqueWeapons);
+            await _connection.InsertAsync(_uniqueFlasks);
             Log($"Finished inserting generic flasks into database.");
 
         }
 
+        #region Generics
         internal Task GetGenericAxesSwordsAsync(IHtmlDocument dom, string upperCaseSingular, string lowerCasePlural, int tableToUse)
         {
-            
+
             var mainDom = dom.GetElementById("mw-content-text");
             var tables = mainDom.GetElementsByTagName("table");
 
@@ -291,9 +470,9 @@ namespace PathOfExileDataScraper
                     Strength = int.Parse(statLines[2].TextContent),
                     Dexterity = int.Parse(statLines[3].TextContent),
                     Damage = statLines[4].TextContent,
-                    APS = double.Parse(statLines[5].TextContent),
-                    CritChance = statLines[6].TextContent, //i have no idea it there will always be 2 trailing digits after the .
-                    DPS = double.Parse(statLines[7].TextContent),
+                    APS = statLines[5].TextContent,
+                    CritChance = statLines[6].TextContent, //i have no idea if there will always be 2 trailing digits after the .
+                    DPS = statLines[7].TextContent,
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Stats = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
                     Type = upperCaseSingular,
@@ -310,19 +489,18 @@ namespace PathOfExileDataScraper
 
         }
 
-        internal async Task GetGenericBowsAsync()
+        internal Task GetGenericBowsThrustingSwordsAsync(IHtmlDocument dom, string upperCaseSingular, string lowerCasePlural, int tableToUse)
         {
 
-            Log("Getting bows...");
+            Log($"Getting {lowerCasePlural}...");
 
-            var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericBowsUrl));
             var mainDom = dom.GetElementById("mw-content-text");
-            var weapons = mainDom.GetElementsByTagName("tbody").FirstOrDefault().Children.Where(element => !element.TextContent.Contains("Stats"));
+            var weapons = mainDom.GetElementsByTagName("tbody").ElementAtOrDefault(tableToUse).Children.Where(element => !element.TextContent.Contains("Stats"));
 
-            Parallel.ForEach(weapons, bow =>
+            Parallel.ForEach(weapons, item =>
             {
 
-                var statLines = bow.GetElementsByTagName("td");
+                var statLines = item.GetElementsByTagName("td");
 
                 var weapon = new GenericWeapon
                 {
@@ -331,14 +509,12 @@ namespace PathOfExileDataScraper
                     LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
                     Dexterity = int.Parse(statLines[2].TextContent),
                     Damage = statLines[3].TextContent,
-                    APS = double.Parse(statLines[4].TextContent),
-                    CritChance = statLines[5].TextContent, //i have no idea it there will always be 2 trailing digits after the .
-                    PDPS = double.TryParse(statLines[6].TextContent, out double pdpsParams) ? pdpsParams : 0,
-                    EDPS = double.TryParse(statLines[7].TextContent, out double edpsParams) ? edpsParams : 0,
-                    DPS = double.Parse(statLines[8].TextContent),
+                    APS = statLines[4].TextContent,
+                    CritChance = statLines[5].TextContent, //i have no idea if there will always be 2 trailing digits after the .
+                    DPS = statLines.ElementAtOrDefault(8)?.TextContent ?? statLines.ElementAtOrDefault(6).TextContent,
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(9)?.TextContent ?? "N/A",
-                    Type = "Bow",
+                    Stats = statLines.ElementAtOrDefault(9)?.TextContent ?? statLines.ElementAtOrDefault(7)?.TextContent,
+                    Type = upperCaseSingular,
 
                 };
 
@@ -346,7 +522,124 @@ namespace PathOfExileDataScraper
 
             });
 
-            Log("Finished getting bows.");
+            Log($"Finished getting {lowerCasePlural}.");
+
+            return Task.CompletedTask;
+
+        }
+
+        internal async Task GetGenericFishingRodsAsync()
+        {
+
+            Log("Getting fishing rods...");
+
+            var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericFishingRodsUrl));
+            var mainDom = dom.GetElementById("mw-content-text");
+            var weapons = mainDom.GetElementsByTagName("tbody").FirstOrDefault().Children.Where(element => !element.TextContent.Contains("CritDPS"));
+
+            Parallel.ForEach(weapons, claw =>
+            {
+
+                var statLines = claw.GetElementsByTagName("td");
+
+                var weapon = new GenericWeapon
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Damage = statLines[2].TextContent,
+                    APS = statLines[3].TextContent,
+                    CritChance = statLines[4].TextContent, //i have no idea if there will always be 2 trailing digits after the .
+                    DPS = statLines[5].TextContent,
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Type = "Fishing Rod",
+
+                };
+
+                _genericWeapons.Add(weapon);
+
+            });
+
+            Log("Finished getting fishing rods.");
+
+        }
+
+        internal Task GetGenericStavesSceptresAsync(IHtmlDocument dom, string upperCaseSingular, string lowerCasePlural, int tableToUse)
+        {
+
+            Log($"Getting {lowerCasePlural}...");
+
+            var mainDom = dom.GetElementById("mw-content-text");
+            var weapons = mainDom.GetElementsByTagName("tbody").ElementAtOrDefault(tableToUse).Children.Where(element => !element.TextContent.Contains("Stats"));
+
+            Parallel.ForEach(weapons, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+
+                var weapon = new GenericWeapon
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Strength = int.Parse(statLines[2].TextContent),
+                    Intelligence = int.Parse(statLines[3].TextContent),
+                    Damage = statLines[4].TextContent,
+                    APS = statLines[5].TextContent,
+                    CritChance = statLines[6].TextContent, //i have no idea if there will always be 2 trailing digits after the .
+                    DPS = statLines[7].TextContent,
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = statLines[8].TextContent,
+                    Type = upperCaseSingular,
+
+                };
+
+                _genericWeapons.Add(weapon);
+
+            });
+
+            Log($"Finished getting {lowerCasePlural}.");
+
+            return Task.CompletedTask;
+
+        }
+
+        internal Task GetGenericMacesAsync(IHtmlDocument dom, string upperCaseSingular, string lowerCasePlural, int tableToUse)
+        {
+
+            Log($"Getting {lowerCasePlural}...");
+
+            var mainDom = dom.GetElementById("mw-content-text");
+            var weapons = mainDom.GetElementsByTagName("tbody").ElementAtOrDefault(tableToUse).Children.Where(element => !element.TextContent.Contains("Stats"));
+
+            Parallel.ForEach(weapons, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+
+                var weapon = new GenericWeapon
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Strength = int.Parse(statLines[2].TextContent),
+                    Damage = statLines[3].TextContent,
+                    APS = statLines[4].TextContent,
+                    CritChance = statLines[5].TextContent, //i have no idea if there will always be 2 trailing digits after the .
+                    DPS = statLines[6].TextContent,
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = statLines[7].TextContent,
+                    Type = upperCaseSingular,
+
+                };
+
+                _genericWeapons.Add(weapon);
+
+            });
+
+            Log($"Finished getting {lowerCasePlural}.");
+
+            return Task.CompletedTask;
 
         }
 
@@ -372,11 +665,11 @@ namespace PathOfExileDataScraper
                     Dexterity = int.Parse(statLines[2].TextContent),
                     Intelligence = int.Parse(statLines[3].TextContent),
                     Damage = statLines[4].TextContent,
-                    APS = double.Parse(statLines[5].TextContent),
-                    CritChance = statLines[6].TextContent, //i have no idea it there will always be 2 trailing digits after the .
-                    DPS = double.Parse(statLines[7].TextContent),
+                    APS = statLines[5].TextContent,
+                    CritChance = statLines[6].TextContent, //i have no idea if there will always be 2 trailing digits after the .
+                    DPS = statLines[7].TextContent,
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(8).TextContent,
+                    Stats = Regex.Replace(statLines[8].InnerHtml.Replace("<br>", "\\n"), "<.*?>", string.Empty),
                     Type = $"{upperCaseSingular}",
 
                 };
@@ -386,285 +679,6 @@ namespace PathOfExileDataScraper
             });
 
             Log($"Finished getting {lowerCasePlural}.");
-
-        }
-
-        internal async Task GetGenericFishingRodsAsync()
-        {
-
-            Log("Getting fishing rods...");
-
-            var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericFishingRodsUrl));
-            var mainDom = dom.GetElementById("mw-content-text");
-            var weapons = mainDom.GetElementsByTagName("tbody").FirstOrDefault().Children.Where(element => !element.TextContent.Contains("CritDPS"));
-
-            Parallel.ForEach(weapons, claw =>
-            {
-
-                var statLines = claw.GetElementsByTagName("td");
-
-                var weapon = new GenericWeapon
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Damage = statLines[2].TextContent,
-                    APS = double.Parse(statLines[3].TextContent),
-                    CritChance = statLines[4].TextContent, //i have no idea it there will always be 2 trailing digits after the .
-                    DPS = double.Parse(statLines[5].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Type = "Fishing Rod",
-
-                };
-
-                _genericWeapons.Add(weapon);
-
-            });
-
-            Log("Finished getting fishing rods.");
-
-        }
-
-        internal async Task GetGenericMacesAsync()
-        {
-
-            Log("Getting one handed maces...");
-
-            var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericMacesUrl));
-            var mainDom = dom.GetElementById("mw-content-text");
-            var weapons = mainDom.GetElementsByTagName("tbody");
-
-            var oneHandedMaces = weapons.FirstOrDefault().Children.Where(element => !element.TextContent.Contains("DPSStats"));
-
-            Parallel.ForEach(oneHandedMaces, mace =>
-            {
-
-                var statLines = mace.GetElementsByTagName("td");
-
-                var weapon = new GenericWeapon
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Strength = int.Parse(statLines[2].TextContent),
-                    Damage = statLines[3].TextContent,
-                    APS = double.Parse(statLines[4].TextContent),
-                    CritChance = statLines[5].TextContent, //i have no idea it there will always be 2 trailing digits after the .
-                    DPS = double.Parse(statLines[6].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(7)?.TextContent ?? "N/A",
-                    Type = "One Handed Mace",
-
-                };
-
-                _genericWeapons.Add(weapon);
-
-            });
-
-            Log("Finished getting one handed maces.");
-            Log("Getting sceptres...");
-
-            var spectres = weapons.ElementAtOrDefault(1).Children.Where(element => !element.TextContent.Contains("DPSStats"));
-
-            Parallel.ForEach(spectres, mace =>
-            {
-
-                var statLines = mace.GetElementsByTagName("td");
-
-                var weapon = new GenericWeapon
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Strength = int.Parse(statLines[2].TextContent),
-                    Intelligence = int.Parse(statLines[3].TextContent),
-                    Damage = statLines[4].TextContent,
-                    APS = double.Parse(statLines[5].TextContent),
-                    CritChance = statLines[6].TextContent, //i have no idea it there will always be 2 trailing digits after the .
-                    DPS = double.Parse(statLines[7].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
-                    Type = "Sceptre",
-
-                };
-
-                _genericWeapons.Add(weapon);
-
-            });
-
-            Log("Finished getting sceptres.");
-            Log("Getting two handed maces...");
-
-            var twoHandedMaces = weapons.ElementAtOrDefault(2).Children.Where(element => !element.TextContent.Contains("DPSStats"));
-
-            Parallel.ForEach(twoHandedMaces, mace =>
-            {
-
-                var statLines = mace.GetElementsByTagName("td");
-
-                var weapon = new GenericWeapon
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Strength = int.Parse(statLines[2].TextContent),
-                    Damage = statLines[3].TextContent,
-                    APS = double.Parse(statLines[4].TextContent),
-                    CritChance = statLines[5].TextContent, //i have no idea it there will always be 2 trailing digits after the .
-                    DPS = double.Parse(statLines[6].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(7)?.TextContent ?? "N/A",
-                    Type = "Two Handed Mace",
-
-                };
-
-                _genericWeapons.Add(weapon);
-
-            });
-
-            Log("Finished getting two handed maces.");
-
-        }
-
-        internal async Task GetGenericStavesAsync()
-        {
-
-            Log("Getting staves...");
-
-            var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericStavesUrl));
-            var mainDom = dom.GetElementById("mw-content-text");
-            var weapons = mainDom.GetElementsByTagName("tbody");
-
-            var staves = weapons.FirstOrDefault().Children.Where(element => !element.TextContent.Contains("DPSStats"));
-
-            Parallel.ForEach(staves, staff =>
-            {
-
-                var statLines = staff.GetElementsByTagName("td");
-
-                var weapon = new GenericWeapon
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Strength = int.Parse(statLines[2].TextContent),
-                    Intelligence = int.Parse(statLines[3].TextContent),
-                    Damage = statLines[4].TextContent,
-                    APS = double.Parse(statLines[5].TextContent),
-                    CritChance = statLines[6].TextContent, //i have no idea it there will always be 2 trailing digits after the .
-                    DPS = double.Parse(statLines[7].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
-                    Type = "Staff",
-
-                };
-
-                _genericWeapons.Add(weapon);
-
-            });
-
-            Log("Finished getting staves.");
-
-        }
-
-        internal async Task GetGenericSwordsAsync()
-        {
-
-            Log("Getting one handed swords...");
-
-            var dom = await _parser.ParseAsync(await _web.GetStringAsync(GenericSwordsUrl));
-            var mainDom = dom.GetElementById("mw-content-text");
-            var weapons = mainDom.GetElementsByTagName("tbody");
-
-            var oneHandedSwords = weapons.FirstOrDefault().Children.Where(element => !element.TextContent.Contains("DPSStats"));
-
-            Parallel.ForEach(oneHandedSwords, sword =>
-            {
-
-                var statLines = sword.GetElementsByTagName("td");
-
-                var weapon = new GenericWeapon
-                {
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Strength = int.Parse(statLines[2].TextContent),
-                    Dexterity = int.Parse(statLines[3].TextContent),
-                    Damage = statLines[4].TextContent,
-                    APS = double.Parse(statLines[5].TextContent),
-                    CritChance = statLines[6].TextContent, //i have no idea it there will always be 2 trailing digits after the .
-                    DPS = double.Parse(statLines[7].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
-                    Type = "One Handed Sword",
-
-                };
-
-                _genericWeapons.Add(weapon);
-
-            });
-
-            Log("Finished getting one handed swords.");
-            Log("Getting thrusting one handed swords...");
-
-            var thrustingSwords = weapons.ElementAtOrDefault(1).Children.Where(element => !element.TextContent.Contains("DPSStats"));
-
-            Parallel.ForEach(thrustingSwords, sword =>
-            {
-
-                var statLines = sword.GetElementsByTagName("td");
-
-                var weapon = new GenericWeapon
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Dexterity = int.Parse(statLines[2].TextContent),
-                    Damage = statLines[3].TextContent,
-                    APS = double.Parse(statLines[4].TextContent),
-                    CritChance = statLines[5].TextContent, //i have no idea it there will always be 2 trailing digits after the .
-                    DPS = double.Parse(statLines[6].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(7)?.TextContent ?? "N/A",
-                    Type = "Thrusting One Handed Sword",
-
-                };
-
-                _genericWeapons.Add(weapon);
-
-            });
-
-            Log("Finished getting thrusting one handed swords.");
-            Log("Getting two handed swords...");
-
-            var twoHandedSwords = weapons.ElementAtOrDefault(2).Children.Where(element => !element.TextContent.Contains("DPSStats"));
-
-            Parallel.ForEach(twoHandedSwords, sword =>
-            {
-
-                var statLines = sword.GetElementsByTagName("td");
-
-                var weapon = new GenericWeapon
-                {
-
-                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Strength = int.Parse(statLines[2].TextContent),
-                    Dexterity = int.Parse(statLines[3].TextContent),
-                    Damage = statLines[4].TextContent,
-                    APS = double.Parse(statLines[5].TextContent),
-                    CritChance = statLines[6].TextContent, //i have no idea it there will always be 2 trailing digits after the .
-                    DPS = double.Parse(statLines[7].TextContent),
-                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
-                    Stats = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
-                    Type = "Two Handed Sword",
-
-                };
-
-                _genericWeapons.Add(weapon);
-
-            });
-
-            Log("Finished getting two handed swords.");
 
         }
 
@@ -691,9 +705,9 @@ namespace PathOfExileDataScraper
                     LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
                     Intelligence = int.Parse(statLines[2].TextContent),
                     Damage = statLines[3].TextContent,
-                    APS = double.Parse(statLines[4].TextContent),
-                    CritChance = statLines[5].TextContent, //i have no idea it there will always be 2 trailing digits after the .
-                    DPS = double.Parse(statLines[6].TextContent),
+                    APS = statLines[4].TextContent,
+                    CritChance = statLines[5].TextContent, //i have no idea if there will always be 2 trailing digits after the .
+                    DPS = statLines[6].TextContent,
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Stats = statLines.ElementAtOrDefault(7)?.TextContent ?? "N/A",
                     Type = "Wand",
@@ -730,7 +744,7 @@ namespace PathOfExileDataScraper
                     Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
                     LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
                     Strength = int.Parse(statLines[2].TextContent),
-                    Armour = int.Parse(statLines[3].TextContent),
+                    Armour = statLines[3].TextContent,
                     BlockChance = isShield ? statLines[4].TextContent : "N/A",
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Stats = isShield ? statLines.ElementAtOrDefault(5).TextContent : statLines.ElementAtOrDefault(4).TextContent,
@@ -758,7 +772,7 @@ namespace PathOfExileDataScraper
                     Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
                     LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
                     Dexterity = int.Parse(statLines[2].TextContent),
-                    Evasion = int.Parse(statLines[3].TextContent),
+                    Evasion = statLines[3].TextContent,
                     BlockChance = isShield ? statLines[4].TextContent : "N/A",
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Stats = isShield ? statLines.ElementAtOrDefault(5).TextContent : statLines.ElementAtOrDefault(4).TextContent,
@@ -786,7 +800,7 @@ namespace PathOfExileDataScraper
                     Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
                     LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
                     Intelligence = int.Parse(statLines[2].TextContent),
-                    EnergyShield = int.Parse(statLines[3].TextContent),
+                    EnergyShield = statLines[3].TextContent,
                     BlockChance = isShield ? statLines[4].TextContent : "N/A",
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Stats = isShield ? statLines.ElementAtOrDefault(5).TextContent : statLines.ElementAtOrDefault(4).TextContent,
@@ -815,8 +829,8 @@ namespace PathOfExileDataScraper
                     LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
                     Strength = int.Parse(statLines[2].TextContent),
                     Dexterity = int.Parse(statLines[3].TextContent),
-                    Armour = int.Parse(statLines[4].TextContent),
-                    Evasion = int.Parse(statLines[5].TextContent),
+                    Armour = statLines[4].TextContent,
+                    Evasion = statLines[5].TextContent,
                     BlockChance = isShield ? statLines[6].TextContent : "N/A",
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Stats = isShield ? statLines.ElementAtOrDefault(7).TextContent : statLines.ElementAtOrDefault(6).TextContent,
@@ -845,8 +859,8 @@ namespace PathOfExileDataScraper
                     LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
                     Strength = int.Parse(statLines[2].TextContent),
                     Intelligence = int.Parse(statLines[3].TextContent),
-                    Armour = int.Parse(statLines[4].TextContent),
-                    EnergyShield = int.Parse(statLines[5].TextContent),
+                    Armour = statLines[4].TextContent,
+                    EnergyShield = statLines[5].TextContent,
                     BlockChance = isShield ? statLines[6].TextContent : "N/A",
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Stats = isShield ? statLines.ElementAtOrDefault(7).TextContent : statLines.ElementAtOrDefault(6).TextContent,
@@ -875,8 +889,8 @@ namespace PathOfExileDataScraper
                     LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
                     Dexterity = int.Parse(statLines[2].TextContent),
                     Intelligence = int.Parse(statLines[3].TextContent),
-                    Evasion = int.Parse(statLines[4].TextContent),
-                    EnergyShield = int.Parse(statLines[5].TextContent),
+                    Evasion = statLines[4].TextContent,
+                    EnergyShield = statLines[5].TextContent,
                     BlockChance = isShield ? statLines[6].TextContent : "N/A",
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Stats = isShield ? statLines.ElementAtOrDefault(7).TextContent : statLines.ElementAtOrDefault(6).TextContent,
@@ -950,11 +964,11 @@ namespace PathOfExileDataScraper
 
                     Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
                     LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Life = IsManaFlasks ? 0 : int.Parse(statLines[2].TextContent),
-                    Mana = IsManaFlasks ? int.Parse(statLines[2].TextContent) : 0,
-                    Duration = double.Parse(statLines[3].TextContent),
-                    Usage = int.Parse(statLines[4].TextContent),
-                    Capacity = int.Parse(statLines[5].TextContent),
+                    Life = IsManaFlasks ? "0" : statLines[2].TextContent,
+                    Mana = IsManaFlasks ? statLines[2].TextContent : "0",
+                    Duration = statLines[3].TextContent,
+                    Usage = statLines[4].TextContent,
+                    Capacity = statLines[5].TextContent,
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Type = $"{upperCaseSingular}",
 
@@ -989,11 +1003,11 @@ namespace PathOfExileDataScraper
 
                     Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
                     LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Life = int.Parse(statLines[2].TextContent),
-                    Mana = int.Parse(statLines[3].TextContent),
-                    Duration = double.Parse(statLines[4].TextContent),
-                    Usage = int.Parse(statLines[5].TextContent),
-                    Capacity = int.Parse(statLines[6].TextContent),
+                    Life = statLines[2].TextContent,
+                    Mana = statLines[3].TextContent,
+                    Duration = statLines[4].TextContent,
+                    Usage = statLines[5].TextContent,
+                    Capacity = statLines[6].TextContent,
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
                     Type = $"Hybrid Flask",
 
@@ -1018,7 +1032,7 @@ namespace PathOfExileDataScraper
 
             var flasks = flasksTable.GetElementsByTagName("tr").Where(element => !element.TextContent.Contains("Capacity"));
 
-            Parallel.ForEach(flasks, new ParallelOptions { MaxDegreeOfParallelism = 1 }, flask =>
+            Parallel.ForEach(flasks, flask =>
             {
 
                 var statLines = flask.GetElementsByTagName("td");
@@ -1028,9 +1042,9 @@ namespace PathOfExileDataScraper
 
                     Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
                     LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
-                    Duration = double.Parse(statLines[2].TextContent),
-                    Usage = int.Parse(statLines[3].TextContent),
-                    Capacity = int.Parse(statLines[4].TextContent),
+                    Duration = statLines[2].TextContent,
+                    Usage = statLines[3].TextContent,
+                    Capacity = statLines[4].TextContent,
                     BuffEffects = Regex.Replace(statLines[5].InnerHtml.Replace("<br>", "\\n"), "<.*?>", string.Empty),
                     Stats = statLines[6].TextContent,
                     ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
@@ -1045,6 +1059,542 @@ namespace PathOfExileDataScraper
             Log($"Finished getting utility flasks.");
 
         }
+        #endregion Generics
+
+        #region Uniques
+        internal Task GetUniqueStrDexWeaponsAsync(IElement table, string upperCaseSingular, string lowerCasePlural)
+        {
+
+            Log($"Getting {lowerCasePlural}...");
+
+            var weapons = table.Children.Where(element => !element.TextContent.Contains("DPSStats"));
+
+            Parallel.ForEach(weapons, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var statElement = statLines.ElementAtOrDefault(10) ?? statLines.ElementAtOrDefault(9); //regular weapon ?? fishing rod
+                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+
+                var weapon = new UniqueWeapon
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Strength = int.Parse(statLines[2].TextContent),
+                    Dexterity = int.Parse(statLines[3].TextContent),
+                    Damage = Regex.Replace(statLines[4].InnerHtml.Replace("<br>", "\\n"), "<.*?>", string.Empty),
+                    APS = statLines[5].TextContent,
+                    CritChance = statLines[6].TextContent, //i have no idea if there will always be 2 trailing digits after the .
+                    PDPS = statLines[7].TextContent,
+                    EDPS = statLines[8].TextContent,
+                    DPS = statLines.ElementAtOrDefault(9)?.TextContent ?? "N/A",
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = Regex.Replace(formattedStats, "<.*?>", string.Empty),
+                    Type = upperCaseSingular,
+
+                };
+
+                _uniqueWeapons.Add(weapon);
+
+            });
+
+            Log($"Finished getting {lowerCasePlural}.");
+
+            return Task.CompletedTask;
+
+        }
+
+        internal Task GetUniqueDexWeaponsAsync(IElement table, string upperCaseSingular, string lowerCasePlural)
+        {
+
+            Log($"Getting {lowerCasePlural}...");
+
+            var weapons = table.Children.Where(element => !element.TextContent.Contains("DPSStats"));
+
+            Parallel.ForEach(weapons, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var statElement = statLines[9];
+                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+
+                var weapon = new UniqueWeapon
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Dexterity = int.Parse(statLines[2].TextContent),
+                    Damage = Regex.Replace(statLines[3].InnerHtml.Replace("<br>", "\\n"), "<.*?>", string.Empty),
+                    APS = statLines[4].TextContent,
+                    CritChance = statLines[5].TextContent, //i have no idea if there will always be 2 trailing digits after the .
+                    PDPS = statLines[6].TextContent,
+                    EDPS = statLines[7].TextContent,
+                    DPS = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = Regex.Replace(formattedStats, "<.*?>", string.Empty), //regular weapon ?? fishing rod
+                    Type = upperCaseSingular,
+
+                };
+
+                _uniqueWeapons.Add(weapon);
+
+            });
+
+            Log($"Finished getting {lowerCasePlural}.");
+
+            return Task.CompletedTask;
+
+        }
+
+        internal Task GetUniqueDexIntelWeaponsAsync(IElement table, string upperCaseSingular, string lowerCasePlural)
+        {
+
+            Log($"Getting {lowerCasePlural}...");
+
+            var weapons = table.Children.Where(element => !element.TextContent.Contains("DPSStats"));
+
+            Parallel.ForEach(weapons, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var statElement = statLines[10];
+                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+
+                var weapon = new UniqueWeapon
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Dexterity = int.Parse(statLines[2].TextContent),
+                    Intelligence = int.Parse(statLines[3].TextContent),
+                    Damage = Regex.Replace(statLines[4].InnerHtml.Replace("<br>", "\\n"), "<.*?>", string.Empty),
+                    APS = statLines[5].TextContent,
+                    CritChance = statLines[6].TextContent, //i have no idea if there will always be 2 trailing digits after the .
+                    PDPS = statLines[7].TextContent,
+                    EDPS = statLines[8].TextContent,
+                    DPS = statLines.ElementAtOrDefault(9)?.TextContent ?? "N/A",
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = Regex.Replace(formattedStats, "<.*?>", string.Empty),
+                    Type = upperCaseSingular,
+
+                };
+
+                _uniqueWeapons.Add(weapon);
+
+            });
+
+            Log($"Finished getting {lowerCasePlural}.");
+
+            return Task.CompletedTask;
+
+        }
+
+        internal Task GetUniqueStrWeaponsAsync(IElement table, string upperCaseSingular, string lowerCasePlural)
+        {
+
+            Log($"Getting {lowerCasePlural}...");
+
+            var weapons = table.Children.Where(element => !element.TextContent.Contains("DPSStats"));
+
+            Parallel.ForEach(weapons, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var statElement = statLines[9];
+                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+
+                var weapon = new UniqueWeapon
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Strength = int.Parse(statLines[2].TextContent),
+                    Damage = Regex.Replace(statLines[3].InnerHtml.Replace("<br>", "\\n"), "<.*?>", string.Empty),
+                    APS = statLines[4].TextContent,
+                    CritChance = statLines[5].TextContent, //i have no idea if there will always be 2 trailing digits after the .
+                    PDPS = statLines[6].TextContent,
+                    EDPS = statLines[7].TextContent,
+                    DPS = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = Regex.Replace(formattedStats, "<.*?>", string.Empty), //regular weapon ?? fishing rod
+                    Type = upperCaseSingular,
+
+                };
+
+                _uniqueWeapons.Add(weapon);
+
+            });
+
+            Log($"Finished getting {lowerCasePlural}.");
+
+            return Task.CompletedTask;
+
+        }
+
+        internal Task GetUniqueStrIntelWeaponsAsync(IElement table, string upperCaseSingular, string lowerCasePlural)
+        {
+
+            Log($"Getting {lowerCasePlural}...");
+
+            var weapons = table.Children.Where(element => !element.TextContent.Contains("DPSStats"));
+
+            Parallel.ForEach(weapons, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var statElement = statLines[10];
+                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+
+                var weapon = new UniqueWeapon
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Strength = int.Parse(statLines[2].TextContent),
+                    Intelligence = int.Parse(statLines[3].TextContent),
+                    Damage = Regex.Replace(statLines[4].InnerHtml.Replace("<br>", "\\n"), "<.*?>", string.Empty),
+                    APS = statLines[5].TextContent,
+                    CritChance = statLines[6].TextContent, //i have no idea if there will always be 2 trailing digits after the .
+                    PDPS = statLines[7].TextContent,
+                    EDPS = statLines[8].TextContent,
+                    DPS = statLines.ElementAtOrDefault(9)?.TextContent ?? "N/A",
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = Regex.Replace(formattedStats, "<.*?>", string.Empty),
+                    Type = upperCaseSingular,
+
+                };
+
+                _uniqueWeapons.Add(weapon);
+
+            });
+
+            Log($"Finished getting {lowerCasePlural}.");
+
+            return Task.CompletedTask;
+
+        }
+
+        internal Task GetUniqueIntelWeaponsAsync(IElement table, string upperCaseSingular, string lowerCasePlural)
+        {
+
+            Log($"Getting {lowerCasePlural}...");
+
+            var weapons = table.Children.Where(element => !element.TextContent.Contains("DPSStats"));
+
+            Parallel.ForEach(weapons, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var statElement = statLines[9];
+                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+
+                var weapon = new UniqueWeapon
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Intelligence = int.Parse(statLines[2].TextContent),
+                    Damage = Regex.Replace(statLines[3].InnerHtml.Replace("<br>", "\\n"), "<.*?>", string.Empty),
+                    APS = statLines[4].TextContent,
+                    CritChance = statLines[5].TextContent, //i have no idea if there will always be 2 trailing digits after the .
+                    PDPS = statLines[6].TextContent,
+                    EDPS = statLines[7].TextContent,
+                    DPS = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = Regex.Replace(formattedStats, "<.*?>", string.Empty),
+                    Type = upperCaseSingular,
+
+                };
+
+                _uniqueWeapons.Add(weapon);
+
+            });
+
+            Log($"Finished getting {lowerCasePlural}.");
+
+            return Task.CompletedTask;
+
+        }
+
+        internal Task GetSingleAttributeArmoursAsync(IElement table, string attribute, string armorType, string upperCaseSingular, string lowerCasePlural)
+        {
+
+            Log($"Getting {lowerCasePlural}...");
+
+            var armours = table.Children.Where(element => !element.TextContent.Contains("Stats"));
+
+            Parallel.ForEach(armours, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var statElement = statLines[4];
+                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+
+                var armour = new UniqueArmour
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = Regex.Replace(formattedStats, "<.*?>", string.Empty),
+                    Type = upperCaseSingular,
+
+                };
+
+                armour.GetType().GetProperties().First(property => property.Name == attribute).SetValue(armour, int.Parse(statLines[2].TextContent));
+                armour.GetType().GetProperties().First(property => property.Name == armorType).SetValue(armour, statLines[3].TextContent);
+
+                _uniqueArmours.Add(armour);
+
+            });
+
+            Log($"Finished getting {lowerCasePlural}.");
+
+            return Task.CompletedTask;
+
+        }
+
+        internal Task GetDoubleAttributeArmoursAsync(IElement table, string attributeOne, string attributeTwo, string armorTypeOne, string armorTypeTwo,
+            string upperCaseSingular, string lowerCasePlural)
+        {
+
+            Log($"Getting {lowerCasePlural}...");
+
+            var armours = table.Children.Where(element => !element.TextContent.Contains("Stats"));
+
+            Parallel.ForEach(armours, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var statElement = statLines[4];
+                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+
+                var armour = new UniqueArmour
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = Regex.Replace(formattedStats, "<.*?>", string.Empty),
+                    Type = upperCaseSingular,
+
+                };
+
+                armour.GetType().GetProperties().First(property => property.Name == attributeOne).SetValue(armour, int.Parse(statLines[2].TextContent));
+                armour.GetType().GetProperties().First(property => property.Name == attributeTwo).SetValue(armour, int.Parse(statLines[3].TextContent));
+                armour.GetType().GetProperties().First(property => property.Name == armorTypeOne).SetValue(armour, statLines[4].TextContent);
+                armour.GetType().GetProperties().First(property => property.Name == armorTypeTwo).SetValue(armour, statLines[5].TextContent);
+
+                _uniqueArmours.Add(armour);
+
+            });
+
+            Log($"Finished getting {lowerCasePlural}.");
+
+            return Task.CompletedTask;
+
+        }
+
+        //there is only one type of armor that currently has all 3 attributes, but i might as well make a method for future use
+        internal Task GetTripleAttributeArmoursAsync(IElement table, string upperCaseSingular, string lowerCasePlural)
+        {
+
+            Log($"Getting {lowerCasePlural}...");
+
+            var armours = table.Children.Where(element => !element.TextContent.Contains("Stats"));
+
+            Parallel.ForEach(armours, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var statElement = statLines[4];
+                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+
+                var armour = new UniqueArmour
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Strength = int.Parse(statLines[2].TextContent),
+                    Dexterity = int.Parse(statLines[3].TextContent),
+                    Intelligence = int.Parse(statLines[4].TextContent),
+                    Armour = statLines[5].TextContent,
+                    Evasion = statLines[6].TextContent,
+                    EnergyShield = statLines[7].TextContent,
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = Regex.Replace(formattedStats, "<.*?>", string.Empty),
+                    Type = upperCaseSingular,
+
+                };
+
+                _uniqueArmours.Add(armour);
+
+            });
+
+            Log($"Finished getting {lowerCasePlural}.");
+
+            return Task.CompletedTask;
+
+        }
+
+        internal Task GetUniqueAccessoriesAsync(IElement table, string upperCaseSingular, string lowerCasePlural)
+        {
+
+            Log($"Getting {lowerCasePlural}...");
+
+            var accessories = table.Children.Where(element => !element.TextContent.Contains("ItemStats"));
+
+            Parallel.ForEach(accessories, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var statElement = statLines[2];
+                var formattedStats = statElement.InnerHtml.Replace("Corrupted", string.Empty).Replace("<br>", "\\n").Trim().Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+
+                var accessory = new UniqueAccessory
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = Regex.Replace(formattedStats, "<.*?>", string.Empty),
+                    IsCorrupted = statElement.TextContent.Contains("Corrupted"),
+                    Type = upperCaseSingular,
+
+                };
+
+                _uniqueAccessories.Add(accessory);
+
+            });
+
+            Log($"Finished getting {lowerCasePlural}.");
+
+            return Task.CompletedTask;
+
+        }
+
+        internal Task GetUniqueLifeManaFlasksAsync(IElement table, string upperCaseSingular, string lowerCasePlural, bool isManaFlask)
+        {
+
+            Log($"Getting {lowerCasePlural}...");
+
+            var flasks = table.Children.Where(element => !element.TextContent.Contains("CapacityStats"));
+
+            Parallel.ForEach(flasks, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var statElement = statLines[6];
+                var formattedStats = statElement.InnerHtml.Replace("Corrupted", string.Empty).Replace("<br>", "\\n").Trim().Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+
+                var flask = new UniqueFlask
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Life = isManaFlask ? "0" : statLines[2].TextContent,
+                    Mana = isManaFlask ? statLines[2].TextContent : "0",
+                    Duration = statLines[3].TextContent,
+                    Usage = statLines[4].TextContent,
+                    Capacity = statLines[5].TextContent,
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = Regex.Replace(formattedStats, "<.*?>", string.Empty),
+                    Type = upperCaseSingular,
+
+                };
+
+                _uniqueFlasks.Add(flask);
+
+            });
+
+            Log($"Finished getting {lowerCasePlural}.");
+
+            return Task.CompletedTask;
+
+        }
+
+        internal Task GetUniqueHybridFlasksAsync(IElement table)
+        {
+
+            Log($"Getting hybrid flasks...");
+
+            var flasks = table.Children.Where(element => !element.TextContent.Contains("CapacityStats"));
+
+            Parallel.ForEach(flasks, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var statElement = statLines[7];
+                var formattedStats = statElement.InnerHtml.Replace("Corrupted", string.Empty).Replace("<br>", "\\n").Trim().Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+
+                var flask = new UniqueFlask
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Life = statLines[2].TextContent,
+                    Mana = statLines[3].TextContent,
+                    Duration = statLines[4].TextContent,
+                    Usage = statLines[5].TextContent,
+                    Capacity = statLines[6].TextContent,
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = Regex.Replace(formattedStats, "<.*?>", string.Empty),
+                    Type = "Hybrid Flask",
+
+                };
+
+                _uniqueFlasks.Add(flask);
+
+            });
+
+            Log($"Finished getting hybrid flasks.");
+
+            return Task.CompletedTask;
+
+        }
+
+        internal Task GetUniqueUtilityFlasksAsync(IElement table)
+        {
+
+            Log($"Getting utility flasks...");
+
+            var flasks = table.Children.Where(element => !element.TextContent.Contains("Stats"));
+
+            Parallel.ForEach(flasks, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var buffElement = statLines[5];
+                var formattedBuffs = buffElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+                var statElement = statLines[6];
+                var formattedStats = statElement.InnerHtml.Replace("Corrupted", string.Empty).Replace("<br>", "\\n").Trim().Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+
+                var flask = new UniqueFlask
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    LevelReq = int.TryParse(statLines[1].TextContent, out int levelParams) ? levelParams : 0,
+                    Duration = statLines[2].TextContent,
+                    Usage = statLines[3].TextContent,
+                    Capacity = statLines[5].TextContent,
+                    BuffEffects = Regex.Replace(formattedBuffs, "<.*?>", string.Empty),
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = Regex.Replace(formattedStats, "<.*?>", string.Empty),
+                    Type = "Utility Flask",
+
+                };
+
+                _uniqueFlasks.Add(flask);
+
+            });
+
+            Log($"Finished getting utility flasks.");
+
+            return Task.CompletedTask;
+
+        }
+        #endregion Uniques
 
         internal void Log(string message)
             => Console.WriteLine($"{DateTime.Now} {message}");

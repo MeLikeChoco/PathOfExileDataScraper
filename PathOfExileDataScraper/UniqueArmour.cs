@@ -8,12 +8,10 @@ using System.Threading.Tasks;
 namespace PathOfExileDataScraper
 {
 
-    [Table("UniqueWeapons")]
-    public class UniqueWeapon : GenericWeapon
+    [Table("UniqueArmours")]
+    public class UniqueArmour : GenericArmour
     {
-        
-        public string PDPS { get; set; } = "N/A";
-        public string EDPS { get; set; } = "N/A";
 
     }
+
 }

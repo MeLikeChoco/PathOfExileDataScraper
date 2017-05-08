@@ -19,11 +19,9 @@ namespace PathOfExileDataScraper
         public int Dexterity { get; set; } = 0;
         public int Intelligence { get; set; } = 0;
         public string Damage { get; set; } = "0";
-        public double APS { get; set; } = 0;
+        public string APS { get; set; } = "0";
         public string CritChance { get; set; } = "0%";
-        public double PDPS { get; set; } = 0;
-        public double EDPS { get; set; } = 0;
-        public double DPS { get; set; } = 0;
+        public string DPS { get; set; } = "0";
         public string Stats { get; set; } = "N/A";
         public string ImageUrl { get; set; }
         public string Type { get; set; } = "N/A";
