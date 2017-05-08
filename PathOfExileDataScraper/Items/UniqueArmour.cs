@@ -5,11 +5,11 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace PathOfExileDataScraper
+namespace PathOfExileDataScraper.Items
 {
 
-    [Table("UniqueFlasks")]
-    public class UniqueFlask : GenericFlask
+    [Table("UniqueArmours")]
+    public class UniqueArmour : GenericArmour
     {
 
     }

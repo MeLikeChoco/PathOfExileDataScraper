@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.Text.RegularExpressions;
 using AngleSharp.Dom.Html;
 using System.Reflection;
+using PathOfExileDataScraper.Items;
 
 //I tried so hard to reduce the lines of code needed that now I'm scared to the fact that I may not
 //even remember what some parts even do after taking a break from this.

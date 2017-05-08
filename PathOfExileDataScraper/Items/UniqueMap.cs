@@ -5,20 +5,17 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace PathOfExileDataScraper
+namespace PathOfExileDataScraper.Items
 {
 
-    [Table("UniqueJewels")]
-    public class UniqueJewel
+    [Table("UniqueMaps")]
+    public class UniqueMap
     {
 
         public string Name { get; set; }
-        public string Limit { get; set; }
-        public string Radius { get; set; }
+        public string MapLevel { get; set; } //using string for future proofing
         public string Stats { get; set; }
-        public bool IsCorrupted { get; set; } = false;
         public string ImageUrl { get; set; } = "N/A";
-        public string ObtainMethod { get; set; }
 
     }
 
