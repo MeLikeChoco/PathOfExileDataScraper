@@ -13,7 +13,7 @@ namespace PathOfExileDataScraper
     {
 
         public string Name { get; set; }
-        public int Level { get; set; }
+        public int MapLevel { get; set; }
         public string Tier { get; set; }
         public bool Unique { get; set; }
         public string LayoutType { get; set; }

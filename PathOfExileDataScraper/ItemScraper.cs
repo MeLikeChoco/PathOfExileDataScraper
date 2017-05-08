@@ -7,13 +7,11 @@ using System.Net.Http;
 using Dapper;
 using AngleSharp.Parser.Html;
 using AngleSharp.Dom;
-using System.Threading;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using AngleSharp.Dom.Html;
-using System.IO;
 using System.Reflection;
 
 //I tried so hard to reduce the lines of code needed that now I'm scared to the fact that I may not
@@ -22,10 +20,10 @@ using System.Reflection;
 namespace PathOfExileDataScraper
 {
 
-    class Program
+    class ItemScraper
     {
         static void Main(string[] args)
-            => new Program().Start().GetAwaiter().GetResult();
+            => new ItemScraper().Start().GetAwaiter().GetResult();
 
         internal const string InMemoryDb = "Data Source = :memory:";
         internal const string FlatFileDb = "Data Source = PathOfExile.db";
@@ -75,6 +73,7 @@ namespace PathOfExileDataScraper
         internal const string UniqueAccessoriesUrl = "/List_of_unique_accessories";
         internal const string UniqueFlasksUrl = "/List_of_unique_flasks";
         internal const string UniqueJewelsUrl = "/List_of_unique_jewels";
+        internal const string UniqueMapsUrl = "/List_of_unique_maps";
         #endregion Uniques
 
         internal const string MapsUrl = "/Map";
@@ -91,6 +90,7 @@ namespace PathOfExileDataScraper
         internal ConcurrentBag<UniqueFlask> _uniqueFlasks;
         internal ConcurrentBag<UniqueJewel> _uniqueJewels;
         internal ConcurrentBag<Map> _maps;
+        internal ConcurrentBag<UniqueMap> _uniqueMaps;
 
         internal async Task Start()
         {
@@ -140,8 +140,12 @@ namespace PathOfExileDataScraper
             Log($"Getting unique jewels took {_stopwatch.Elapsed.TotalSeconds} seconds.");
             _stopwatch.Restart();
 
-            await GetMaps();
+            //await GetMaps();
             Log($"Getting maps took {_stopwatch.Elapsed.TotalSeconds} seconds.");
+            _stopwatch.Restart();
+
+            await GetUniqueMaps();
+            Log($"Getting unique maps took {_stopwatch.Elapsed.TotalSeconds} seconds.");
             _stopwatch.Restart();
 
             _connection.Close();
@@ -492,7 +496,7 @@ namespace PathOfExileDataScraper
 
             await _connection.ExecuteAsync("CREATE TABLE 'Maps' ( " +
                 "'Name' TEXT NOT NULL UNIQUE, " +
-                "'Level' INTEGER, " +
+                "'MapLevel' INTEGER, " +
                 "'Tier' TEXT, " +
                 "'Unique' INTEGER, " +
                 "'LayoutType' TEXT," +
@@ -541,7 +545,7 @@ namespace PathOfExileDataScraper
                 {
 
                     Name = statLines.FirstOrDefault().GetElementsByTagName("a").ElementAtOrDefault(1)?.TextContent ?? statLines.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
-                    Level = int.Parse(statLines[1].TextContent.Trim()),
+                    MapLevel = int.Parse(statLines[1].TextContent.Trim()),
                     Tier = statLines[2].TextContent.Trim(),
                     Unique = statLines[3].GetElementsByTagName("img").FirstOrDefault().GetAttribute("alt") == "yes",
                     LayoutType = char.TryParse(statLines.ElementAtOrDefault(4)?.TextContent.Trim() ?? "blah", out char c) ? layoutTypes[c] : "N/A", //some are not present
@@ -563,6 +567,48 @@ namespace PathOfExileDataScraper
             Log("Inserting maps into database...");
             await _connection.InsertAsync(_maps);
             Log($"Finished maps into database.");
+
+        }
+
+        internal async Task GetUniqueMaps()
+        {
+
+            await _connection.ExecuteAsync("CREATE TABLE 'UniqueMaps' ( " +
+                "'Name' TEXT, " +
+                "'MapLevel' INTEGER, " +
+                "'Stats' TEXT, " +
+                "'ImageUrl' TEXT, " +
+                "PRIMARY KEY('Name') )");
+
+            _uniqueMaps = new ConcurrentBag<UniqueMap>();
+
+            var dom = await _parser.ParseAsync(await _web.GetStringAsync(UniqueMapsUrl));
+            var table = dom.GetElementById("mw-content-text").GetElementsByTagName("tbody").FirstOrDefault();
+            var maps = table.GetElementsByTagName("tr").Where(element => !element.TextContent.Contains("Stats"));
+
+            Parallel.ForEach(maps, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var formattedStats = statLines[2].InnerHtml.Replace("<br>", "\\n");
+
+                var map = new UniqueMap
+                {
+
+                    Name = statLines.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    MapLevel = statLines[1].TextContent,
+                    Stats = Regex.Replace(formattedStats, "<.*?>", string.Empty),
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+
+                };
+
+                _uniqueMaps.Add(map);
+
+            });
+
+            Log("Inserting unique maps...");
+            await _connection.InsertAsync(_uniqueMaps);
+            Log("Finished inserting unique maps.");
 
         }
 
