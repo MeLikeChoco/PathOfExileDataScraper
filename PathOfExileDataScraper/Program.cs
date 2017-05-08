@@ -74,7 +74,10 @@ namespace PathOfExileDataScraper
         internal const string UniqueArmoursUrl = "/List_of_unique_armour";
         internal const string UniqueAccessoriesUrl = "/List_of_unique_accessories";
         internal const string UniqueFlasksUrl = "/List_of_unique_flasks";
+        internal const string UniqueJewelsUrl = "/List_of_unique_jewels";
         #endregion Uniques
+
+        internal const string MapsUrl = "/Map";
 
         //yes, i could pass it through methods to stop persistance
         //but i did this for clarity
@@ -86,6 +89,8 @@ namespace PathOfExileDataScraper
         internal ConcurrentBag<UniqueArmour> _uniqueArmours;
         internal ConcurrentBag<UniqueAccessory> _uniqueAccessories;
         internal ConcurrentBag<UniqueFlask> _uniqueFlasks;
+        internal ConcurrentBag<UniqueJewel> _uniqueJewels;
+        internal ConcurrentBag<Map> _maps;
 
         internal async Task Start()
         {
@@ -127,8 +132,16 @@ namespace PathOfExileDataScraper
             Log($"Getting unique accessories took {_stopwatch.Elapsed.TotalSeconds} seconds.");
             _stopwatch.Restart();
 
-            await GetUniqueFlasks();
+            //await GetUniqueFlasks();
             Log($"Getting unique flasks took {_stopwatch.Elapsed.TotalSeconds} seconds.");
+            _stopwatch.Restart();
+
+            //await GetUniqueJewels();
+            Log($"Getting unique jewels took {_stopwatch.Elapsed.TotalSeconds} seconds.");
+            _stopwatch.Restart();
+
+            await GetMaps();
+            Log($"Getting maps took {_stopwatch.Elapsed.TotalSeconds} seconds.");
             _stopwatch.Restart();
 
             _connection.Close();
@@ -378,7 +391,7 @@ namespace PathOfExileDataScraper
             }
 
             await GetTripleAttributeArmoursAsync(tables[6], typesOfArmourSingular[0], typesOfArmourPlural[0]);
-            
+
             Log("Inserting unique armours into database...");
             await _connection.InsertAsync(_uniqueArmours);
             Log($"Finished inserting unique armours into database.");
@@ -406,7 +419,7 @@ namespace PathOfExileDataScraper
             await GetUniqueAccessoriesAsync(tables[2], "Ring", "rings");
             await GetUniqueAccessoriesAsync(tables[3], "Quiver", "quivers");
             await GetUniqueAccessoriesAsync(tables[4], "Quiver", "quivers"); //i have no clue why there's a random quiver by itself here
-            
+
             Log("Inserting unique accessories into database...");
             await _connection.InsertAsync(_uniqueAccessories);
             Log($"Finished inserting unique accessories into database.");
@@ -440,9 +453,116 @@ namespace PathOfExileDataScraper
             await GetUniqueHybridFlasksAsync(tables[2]);
             await GetUniqueUtilityFlasksAsync(tables[3]);
 
-            Log("Inserting generic flasks into database...");
+            Log("Inserting unique flasks into database...");
             await _connection.InsertAsync(_uniqueFlasks);
-            Log($"Finished inserting generic flasks into database.");
+            Log($"Finished inserting unique flasks into database.");
+
+        }
+
+        internal async Task GetUniqueJewels()
+        {
+
+            await _connection.ExecuteAsync("CREATE TABLE 'UniqueJewels' ( " +
+                "'Name' TEXT NOT NULL, " +
+                "'Limit' TEXT, " +
+                "'Radius' TEXT, " +
+                "'Stats' TEXT, " +
+                "'ImageUrl' TEXT, " +
+                "'IsCorrupted' INTEGER, " +
+                "'ObtainMethod' TEXT ) ");
+
+            _uniqueJewels = new ConcurrentBag<UniqueJewel>();
+
+            var dom = await _parser.ParseAsync(await _web.GetStringAsync(UniqueJewelsUrl));
+            var tables = dom.GetElementById("mw-content-text").GetElementsByTagName("tbody");
+
+            await GetUniqueJewelsAsync(tables[0], "Drop");
+            await GetUniqueJewelsAsync(tables[1], "Corruption");
+            await GetUniqueJewelsAsync(tables[2], "Labryninth");
+            await GetUniqueJewelsAsync(tables[3], "Beta");
+
+            Log("Inserting unique jewels into database...");
+            await _connection.InsertAsync(_uniqueJewels);
+            Log($"Finished unique jewels into database.");
+
+        }
+
+        internal async Task GetMaps()
+        {
+
+            await _connection.ExecuteAsync("CREATE TABLE 'Maps' ( " +
+                "'Name' TEXT NOT NULL UNIQUE, " +
+                "'Level' INTEGER, " +
+                "'Tier' TEXT, " +
+                "'Unique' INTEGER, " +
+                "'LayoutType' TEXT," +
+                "'BossDifficulty' TEXT, " +
+                "'LayoutSet' TEXT, " +
+                "'UniqueBoss' TEXT," +
+                "'NumberOfUniqueBosses' INTEGER," +
+                "'SextantCoverage' INTEGER, " +
+                "'ImageUrl' TEXT, " +
+                "PRIMARY KEY('Name') ) ");
+
+            _maps = new ConcurrentBag<Map>();
+
+            var dom = await _parser.ParseAsync(await _web.GetStringAsync(MapsUrl));
+            var table = dom.GetElementById("mw-content-text").GetElementsByClassName("wikitable sortable")[1].GetElementsByTagName("tbody").FirstOrDefault();
+            var maps = table.GetElementsByTagName("tr").Where(element => !element.TextContent.Contains("Itself"));
+
+            var layoutTypes = new Dictionary<char, string>(3)
+            {
+                { 'A', "The map has a consistent layout that can be reliably fully cleared with no backtracking." },
+                { 'B', "The map has an open layout with few obstacles, or has only short and well-connected side paths." },
+                { 'C', "The map has an open layout with many obstacles, or has long side paths that require backtracking." }
+            };
+
+            var bossDifficulties = new Dictionary<int, string>(5)
+            {
+                { 0, "Any build can be used." },
+                { 1, "Trivial for most builds." },
+                { 2, "Moderate damage output that can be easily kited and/or reasonably mitigated by most builds." },
+                { 3, "Occasionally high damage output that can be avoided reasonably well." },
+                { 4, "High and consistent damage output that can be avoided reasonably well but still very dangerous." },
+                { 5, "High and consistent damage output that is difficult to reliably avoid; skipped by many players." }
+            };
+
+            Log($"Getting maps...");
+
+            Parallel.ForEach(maps, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var formattedBoss = statLines[7].InnerHtml.Replace("<br>", "\\n");
+                formattedBoss = Regex.Replace(formattedBoss, "<.*?>", string.Empty);
+                var test = statLines.FirstOrDefault();
+
+                var map = new Map
+                {
+
+                    Name = statLines.FirstOrDefault().GetElementsByTagName("a").ElementAtOrDefault(1)?.TextContent ?? statLines.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    Level = int.Parse(statLines[1].TextContent.Trim()),
+                    Tier = statLines[2].TextContent.Trim(),
+                    Unique = statLines[3].GetElementsByTagName("img").FirstOrDefault().GetAttribute("alt") == "yes",
+                    LayoutType = char.TryParse(statLines.ElementAtOrDefault(4)?.TextContent.Trim() ?? "blah", out char c) ? layoutTypes[c] : "N/A", //some are not present
+                    BossDifficulty = int.TryParse(statLines.ElementAtOrDefault(5)?.TextContent.Trim() ?? "blah", out int i) ? bossDifficulties[i] : "N/A", //some are not present
+                    LayoutSet = statLines[6].TextContent.Trim(),
+                    UniqueBoss = formattedBoss,
+                    NumberOfUniqueBosses = int.TryParse(statLines[8].TextContent.Trim(), out int number) ? number : 0,
+                    SextantCoverage = int.TryParse(statLines.ElementAtOrDefault(9)?.TextContent.Trim() ?? "blah", out number) ? number : 0,
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault()?.GetAttribute("src") ?? "N/A",
+
+                };
+
+                _maps.Add(map);
+
+            });
+
+            Log("Finished getting maps.");
+
+            Log("Inserting maps into database...");
+            await _connection.InsertAsync(_maps);
+            Log($"Finished maps into database.");
 
         }
 
@@ -1590,6 +1710,43 @@ namespace PathOfExileDataScraper
             });
 
             Log($"Finished getting utility flasks.");
+
+            return Task.CompletedTask;
+
+        }
+
+        internal Task GetUniqueJewelsAsync(IElement table, string obtainMethod)
+        {
+
+            Log($"Getting jewels...");
+
+            var jewels = table.Children.Where(element => !element.TextContent.Contains("RadiusStats"));
+
+            Parallel.ForEach(jewels, item =>
+            {
+
+                var statLines = item.GetElementsByTagName("td");
+                var statElement = statLines[3];
+                var formattedStats = statElement.InnerHtml.Replace("Corrupted", string.Empty).Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+
+                var jewel = new UniqueJewel
+                {
+
+                    Name = statLines.FirstOrDefault().Children.FirstOrDefault().GetElementsByTagName("a").FirstOrDefault().TextContent,
+                    Limit = statLines[1].TextContent,
+                    Radius = statLines[2].TextContent,
+                    ImageUrl = statLines.FirstOrDefault().GetElementsByTagName("img").FirstOrDefault().GetAttribute("src"),
+                    Stats = Regex.Replace(formattedStats, "<.*?>", string.Empty),
+                    IsCorrupted = statLines[3].TextContent.Contains("Corrupted"),
+                    ObtainMethod = obtainMethod
+
+                };
+
+                _uniqueJewels.Add(jewel);
+
+            });
+
+            Log($"Finished getting jewels.");
 
             return Task.CompletedTask;
 
