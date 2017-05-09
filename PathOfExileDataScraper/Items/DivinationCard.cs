@@ -8,13 +8,15 @@ using System.Threading.Tasks;
 namespace PathOfExileDataScraper.Items
 {
 
-    [Table("UniqueMaps")]
-    public class UniqueMap
+    [Table("DivinationCards")]
+    public class DivinationCard
     {
 
         public string Name { get; set; }
-        public string MapLevel { get; set; } //using string for future proofing
-        public string Stats { get; set; }
+        public int Set { get; set; }
+        public string Reward { get; set; }
+        public bool IsRewardCorrupted { get; set; } = false;
+        public string DropRestrictions { get; set; }
         public string ImageUrl { get; set; } = "N/A";
         public string Url { get; set; } = "N/A";
 

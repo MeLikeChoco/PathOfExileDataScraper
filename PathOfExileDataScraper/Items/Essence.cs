@@ -8,13 +8,14 @@ using System.Threading.Tasks;
 namespace PathOfExileDataScraper.Items
 {
 
-    [Table("UniqueMaps")]
-    public class UniqueMap
+    [Table("Essences")]
+    public class Essence
     {
 
         public string Name { get; set; }
-        public string MapLevel { get; set; } //using string for future proofing
-        public string Stats { get; set; }
+        public string Tier { get; set; }
+        public string DropLevel { get; set; }
+        public string Effects { get; set; }
         public string ImageUrl { get; set; } = "N/A";
         public string Url { get; set; } = "N/A";
 

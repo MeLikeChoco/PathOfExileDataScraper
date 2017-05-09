@@ -14,11 +14,12 @@ namespace PathOfExileDataScraper.Items
         
         public string Name { get; set; }
 
-        public int LevelReq { get; set; } = 0;
+        public string LevelReq { get; set; } = "0";
         public string ImageUrl { get; set; } = "N/A";
         public string Stats { get; set; } = "N/A";
         public bool IsCorrupted { get; set; } = false;
         public string Type { get; set; }
+        public string Url { get; set; } = "N/A";
 
     }
 

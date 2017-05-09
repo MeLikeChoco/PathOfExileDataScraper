@@ -13,16 +13,17 @@ namespace PathOfExileDataScraper.Items
     {
 
         public string Name { get; set; }
-        public int MapLevel { get; set; }
+        public string MapLevel { get; set; }
         public string Tier { get; set; }
         public bool Unique { get; set; }
         public string LayoutType { get; set; }
         public string BossDifficulty { get; set; }
         public string LayoutSet { get; set; }
         public string UniqueBoss { get; set; }
-        public int NumberOfUniqueBosses { get; set; }
-        public int SextantCoverage { get; set; }
+        public string NumberOfUniqueBosses { get; set; }
+        public string SextantCoverage { get; set; }
         public string ImageUrl { get; set; }
+        public string Url { get; set; }
 
     }
 
