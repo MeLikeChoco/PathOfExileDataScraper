@@ -25,7 +25,7 @@ namespace PathOfExileDataScraper.Items
         public string Stats { get; set; } = "N/A";
         public string ImageUrl { get; set; }
         public string Type { get; set; } = "N/A";
-        public string Url { get; set; }
+        public string Url { get; set; } = "N/A";
 
     }
 

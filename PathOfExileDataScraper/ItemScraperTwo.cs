@@ -65,13 +65,13 @@ namespace PathOfExileDataScraper
             Log($"Getting unique maps took {_stopwatch.Elapsed.TotalSeconds} seconds.");
             _stopwatch.Restart();
 
-            //await GetDivinationCards();
+            await GetDivinationCards();
             Log($"Getting divination cards took {_stopwatch.Elapsed.TotalSeconds} seconds.");
-            _stopwatch.Reset();
+            _stopwatch.Restart();
 
             //await GetCurrencies();
             Log($"Getting currency took {_stopwatch.Elapsed.TotalSeconds} seconds.");
-            _stopwatch.Reset();
+            _stopwatch.Restart();
 
         }
 
@@ -182,7 +182,7 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = item.GetElementsByTagName("td");
-                var info = statLines.First().GetElementsByTagName("a").First();
+                var info = statLines.First().FirstElementChild.FirstElementChild;
                 var formattedStats = statLines[2].InnerHtml.Replace("<br>", "\\n");
 
                 var map = new UniqueMap
@@ -234,7 +234,6 @@ namespace PathOfExileDataScraper
 
                 var statLines = item.GetElementsByTagName("td");
                 var info = statLines.First().FirstElementChild;
-                var divinationCardUrl = info.GetAttribute("href");
                 var rewardElement = statLines[2].InnerHtml;
                 var formattedReward = rewardElement.Replace("Corrupted", string.Empty).Trim().Replace(" <br> ", "\\n").Replace("<br>", "\\n");
                 var formattedRestrictions = statLines[3].InnerHtml.Replace(" <br> ", "\\n").Replace("<br>", "\\n");
@@ -247,11 +246,11 @@ namespace PathOfExileDataScraper
                     Reward = Regex.Replace(formattedReward, HtmlTagRegex, string.Empty),
                     IsRewardCorrupted = rewardElement.Contains("Corrupted"),
                     DropRestrictions = Regex.Replace(formattedRestrictions, HtmlTagRegex, string.Empty),
-                    Url = BaseUrl + divinationCardUrl,
+                    Url = BaseUrl + info.GetAttribute("href"),
 
                 };
 
-                var cardDom = _parser.Parse(_web.GetStringAsync(divinationCardUrl).Result);
+                var cardDom = _parser.Parse(_web.GetStringAsync(info.GetAttribute("href")).Result);
                 var imageUrl = cardDom.GetElementsByClassName("divicard-art").First().FirstElementChild.GetAttribute("src");
                 card.ImageUrl = imageUrl;
 
@@ -318,18 +317,18 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = item.GetElementsByTagName("td");
-                var info = statLines.First().FirstElementChild;
+                var info = statLines.First().FirstElementChild.FirstElementChild;
                 var formattedEffects = statLines[3].InnerHtml.Replace(" <br> ", "\\n").Replace("<br>", "\\n");
 
                 var essence = new Essence
                 {
 
-                    Name = info.FirstElementChild.TextContent,
+                    Name = info.TextContent,
                     Tier = statLines[1].TextContent,
                     DropLevel = statLines[2].TextContent,
                     Effects = Regex.Replace(formattedEffects, HtmlTagRegex, string.Empty),
-                    ImageUrl = info.GetElementsByTagName("img").First().GetAttribute("src"),
-                    Url = BaseUrl + WebUtility.UrlDecode(info.FirstElementChild.GetAttribute("href")),
+                    ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
+                    Url = BaseUrl + info.GetAttribute("href"),
 
                 };
 
@@ -354,20 +353,20 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = item.GetElementsByTagName("td");
-                var info = statLines.First().FirstElementChild;
+                var info = statLines.First().FirstElementChild.FirstElementChild;
                 var formattedHelp = statLines[4].InnerHtml.Replace("<br>", "\\n");
 
                 var currency = new Currency
                 {
 
-                    Name = info.FirstElementChild.TextContent,
+                    Name = info.TextContent,
                     DropLevel = statLines[1].TextContent,
                     StackSize = statLines[2].TextContent,
                     TabStackSize = statLines[3].TextContent,
                     HelpText = Regex.Replace(formattedHelp, HtmlTagRegex, string.Empty),
                     IsDiscontinued = isDiscontinued,
-                    ImageUrl = info.GetElementsByTagName("img").First().GetAttribute("src"),
-                    Url = BaseUrl + info.FirstElementChild.GetAttribute("href"),
+                    ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
+                    Url = BaseUrl + info.GetAttribute("href"),
 
                 };
 

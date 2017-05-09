@@ -33,6 +33,10 @@ namespace PathOfExileDataScraper
         internal const string HtmlTagRegex = "<.*?>";
         internal readonly string[] TypesOfArmourSingular = new string[] { "Body Armour", "Boot", "Glove", "Helmet" };
         internal readonly string[] TypesOfArmourPlural = new string[] { "body armours", "boots", "gloves", "helmets" };
+        internal readonly string[] TypesOfWeaponSingular = new string[] { "One Handed Axe", "Two Handed Axe", "Bow", "Claw", "Dagger", "Fishing Rod",
+            "One Handed Mace", "Sceptre", "Two Handed Mace", "One Handed Sword", "Thrusting One Handed Sword", "Two Handed Sword", "Staff", "Wand" };
+        internal readonly string[] TypesOfWeaponPlural = new string[] {"one handed axes", "two handed axes", "bows", "claws", "daggers", "fishing rods",
+            "one handed maces", "sceptres", "two handed maces", "one handed swords", "thrusting one handed swords", "two handed swords", "staves", "wands" };
 
         SqliteConnection _connection;
         internal HttpClient _web;
@@ -118,7 +122,7 @@ namespace PathOfExileDataScraper
             Log($"Getting generic accessories took {_stopwatch.Elapsed.TotalSeconds} seconds.");
             _stopwatch.Restart();
 
-            await GetGenericFlasks();
+            //await GetGenericFlasks();
             Log($"Getting generic flasks took {_stopwatch.Elapsed.TotalSeconds} seconds.");
             _stopwatch.Restart();
 
@@ -246,6 +250,8 @@ namespace PathOfExileDataScraper
         internal async Task GetGenericAccessories()
         {
 
+            Log("Getting generic accessories...");
+
             await _connection.ExecuteAsync("CREATE TABLE 'GenericAccessories' ( " +
                 "'Name' TEXT NOT NULL, " +
                 "'LevelReq' INTEGER, " +
@@ -262,6 +268,7 @@ namespace PathOfExileDataScraper
             await GetGenericAcessoriesAsync(GenericQuiversUrl, "Quiver", "quivers");
             await GetGenericAcessoriesAsync(GenericBeltsUrl, "Belt", "belts");
 
+            Log("Finished getting generic accessories.");
             Log("Inserting generic accessories into database...");
             await _connection.InsertAsync(_genericAccessories);
             Log($"Finished inserting generic accessories into database.");
@@ -270,6 +277,8 @@ namespace PathOfExileDataScraper
 
         internal async Task GetGenericFlasks()
         {
+
+            Log("Getting generic flasks...");
 
             await _connection.ExecuteAsync("CREATE TABLE 'GenericFlasks' ( " +
                 "'Name' TEXT NOT NULL UNIQUE, " +
@@ -293,6 +302,7 @@ namespace PathOfExileDataScraper
             await GetGenericUtilityFlasks(GenericUtilityFlasks);
             await GetGenericUtilityFlasks(GenericCriticalUtiliyFlasks);
 
+            Log("Finished getting generic flasks.");
             Log("Inserting generic flasks into database...");
             await _connection.InsertAsync(_genericFlasks);
             Log($"Finished inserting generic flasks into database.");
@@ -301,6 +311,8 @@ namespace PathOfExileDataScraper
 
         internal async Task GetUniqueWeapons()
         {
+
+            Log("Getting unique weapons...");
 
             await _connection.ExecuteAsync("CREATE TABLE 'UniqueWeapons'(" +
                 "'Name' TEXT NOT NULL UNIQUE, " +
@@ -317,6 +329,7 @@ namespace PathOfExileDataScraper
                 "'Stats' TEXT, " +
                 "'ImageUrl' TEXT, " +
                 "'Type' TEXT, " +
+                "'Url' TEXT, " +
                 "PRIMARY KEY('Name') )"); ;
 
             _uniqueWeapons = new ConcurrentBag<UniqueWeapon>();
@@ -324,26 +337,27 @@ namespace PathOfExileDataScraper
             var dom = await _parser.ParseAsync(await _web.GetStringAsync(UniqueWeaponsUrl));
             var tables = dom.GetElementById("mw-content-text").GetElementsByTagName("tbody");
 
-            await GetUniqueStrDexWeapons(tables[0], "One Handed Axe", "one handed axes");
-            await GetUniqueStrDexWeapons(tables[1], "Two Handed Axe", "two handed axes");
-            await GetUniqueStrDexWeapons(tables[5], "Fishing Rod", "fishing rods");
-            await GetUniqueStrDexWeapons(tables[9], "One Handed Sword", "one handed swords");
-            await GetUniqueStrDexWeapons(tables[11], "Two Handed Sword", "two handed swords");
+            await GetUniqueDoubleAttributeWeapons(tables[0], "Strength", "Dexterity", "One Handed Axe", "one handed axes");
+            await GetUniqueDoubleAttributeWeapons(tables[1], "Strength", "Dexterity", "Two Handed Axe", "two handed axes");
+            await GetUniqueDoubleAttributeWeapons(tables[5], "Strength", "Dexterity", "Fishing Rod", "fishing rods");
+            await GetUniqueDoubleAttributeWeapons(tables[9], "Strength", "Dexterity", "One Handed Sword", "one handed swords");
+            await GetUniqueDoubleAttributeWeapons(tables[11], "Strength", "Dexterity", "Two Handed Sword", "two handed swords");
 
-            await GetUniqueDexWeapons(tables[2], "Bow", "bows");
-            await GetUniqueDexWeapons(tables[10], "Thrusting One Handed Sword", "thrusting one handed swords");
+            await GetUniqueSingleAttributeWeapons(tables[2], "Dexterity", "Bow", "bows");
+            await GetUniqueSingleAttributeWeapons(tables[10], "Dexterity", "Thrusting One Handed Sword", "thrusting one handed swords");
 
-            await GetUniqueDexIntelWeapons(tables[3], "Claw", "claws");
-            await GetUniqueDexIntelWeapons(tables[4], "Dagger", "daggers");
+            await GetUniqueDoubleAttributeWeapons(tables[3], "Dexterity", "Intelligence", "Claw", "claws");
+            await GetUniqueDoubleAttributeWeapons(tables[4], "Dexterity", "Intelligence", "Dagger", "daggers");
 
-            await GetUniqueStrWeapons(tables[6], "One Handed Mace", "one handed maces");
-            await GetUniqueStrWeapons(tables[8], "Two Handed Mace", "two handed maces");
+            await GetUniqueSingleAttributeWeapons(tables[6], "Strength", "One Handed Mace", "one handed maces");
+            await GetUniqueSingleAttributeWeapons(tables[8], "Strength", "Two Handed Mace", "two handed maces");
 
-            await GetUniqueStrIntelWeapons(tables[7], "Sceptre", "sceptres");
-            await GetUniqueStrIntelWeapons(tables[12], "Staff", "staves");
+            await GetUniqueDoubleAttributeWeapons(tables[7], "Strength", "Intelligence", "Sceptre", "sceptres");
+            await GetUniqueDoubleAttributeWeapons(tables[12], "Strength", "Intelligence", "Staff", "staves");
 
-            await GetUniqueIntelWeapons(tables[13], "Wand", "wands");
+            await GetUniqueSingleAttributeWeapons(tables[13], "Intelligence", "Wand", "wands");
 
+            Log("Finished getting unique weapons.");
             Log("Inserting unique weapons into database...");
             await _connection.InsertAsync(_uniqueWeapons);
             Log($"Finished inserting unique weapons into database.");
@@ -415,6 +429,8 @@ namespace PathOfExileDataScraper
         internal async Task GetUniqueAccessories()
         {
 
+            Log("Getting unique accessories...");
+
             await _connection.ExecuteAsync("CREATE TABLE 'UniqueAccessories' ( " +
                 "'Name' TEXT NOT NULL, " +
                 "'LevelReq' INTEGER, " +
@@ -435,6 +451,7 @@ namespace PathOfExileDataScraper
             await GetUniqueAccessories(tables[3], "Quiver", "quivers");
             await GetUniqueAccessories(tables[4], "Quiver", "quivers"); //i have no clue why there's a random quiver by itself here
 
+            Log("Finished getting unique accessories.");
             Log("Inserting unique accessories into database...");
             await _connection.InsertAsync(_uniqueAccessories);
             Log($"Finished inserting unique accessories into database.");
@@ -443,6 +460,8 @@ namespace PathOfExileDataScraper
 
         internal async Task GetUniqueFlasks()
         {
+
+            Log("Getting unique flasks...");
 
             await _connection.ExecuteAsync("CREATE TABLE 'UniqueFlasks' ( " +
                 "'Name' TEXT NOT NULL, " +
@@ -455,7 +474,8 @@ namespace PathOfExileDataScraper
                 "'ImageUrl' TEXT, " +
                 "'BuffEffects' TEXT, " +
                 "'Stats' TEXT, " +
-                "'Type' TEXT )");
+                "'Type' TEXT," +
+                "'Url' TEXT )");
 
             _uniqueFlasks = new ConcurrentBag<UniqueFlask>();
 
@@ -468,6 +488,7 @@ namespace PathOfExileDataScraper
             await GetUniqueHybridFlasks(tables[2]);
             await GetUniqueUtilityFlasks(tables[3]);
 
+            Log("Finished getting unique flasks");
             Log("Inserting unique flasks into database...");
             await _connection.InsertAsync(_uniqueFlasks);
             Log($"Finished inserting unique flasks into database.");
@@ -477,6 +498,8 @@ namespace PathOfExileDataScraper
         internal async Task GetUniqueJewels()
         {
 
+            Log("Getting unique jewels...");
+
             await _connection.ExecuteAsync("CREATE TABLE 'UniqueJewels' ( " +
                 "'Name' TEXT NOT NULL, " +
                 "'Limit' TEXT, " +
@@ -484,7 +507,8 @@ namespace PathOfExileDataScraper
                 "'Stats' TEXT, " +
                 "'ImageUrl' TEXT, " +
                 "'IsCorrupted' INTEGER, " +
-                "'ObtainMethod' TEXT ) ");
+                "'ObtainMethod' TEXT, " +
+                "'Url' TEXT ) ");
 
             _uniqueJewels = new ConcurrentBag<UniqueJewel>();
 
@@ -496,6 +520,7 @@ namespace PathOfExileDataScraper
             await GetUniqueJewels(tables[2], "Labryninth");
             await GetUniqueJewels(tables[3], "Beta");
 
+            Log("Finished getting unique jewels.");
             Log("Inserting unique jewels into database...");
             await _connection.InsertAsync(_uniqueJewels);
             Log($"Finished unique jewels into database.");
@@ -710,7 +735,7 @@ namespace PathOfExileDataScraper
         internal Task<GenericWeapon> GetGenericSingleAttributeWeapons(IHtmlCollection<IElement> statLines)
         {
 
-            var info = statLines.First().GetElementsByTagName("a").First();
+            var info = statLines.First().FirstElementChild.FirstElementChild;
             var formattedStats = statLines.ElementAtOrDefault(9)?.InnerHtml ?? statLines[7].InnerHtml;
             formattedStats = formattedStats.Replace("<br>", "\\n").Replace(" <br> ", "\\n");
 
@@ -725,7 +750,7 @@ namespace PathOfExileDataScraper
                 DPS = statLines.ElementAtOrDefault(8)?.TextContent ?? statLines[6].TextContent, //need to account for bows, why are they different -.-
                 ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
                 Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
-                Url = BaseUrl + WebUtility.UrlDecode(info.GetAttribute("href")),
+                Url = BaseUrl + info.GetAttribute("href"),
 
             });
 
@@ -734,7 +759,7 @@ namespace PathOfExileDataScraper
         internal Task<GenericWeapon> GetGenericDoubleAttributeWeapons(IHtmlCollection<IElement> statLines)
         {
 
-            var info = statLines.First().GetElementsByTagName("a").First();
+            var info = statLines.First().FirstElementChild.FirstElementChild;
             var formattedStats = statLines[8].TextContent.Replace("<br>", "\\n").Replace(" <br> ", "\\n");
 
             return Task.FromResult(new GenericWeapon
@@ -748,7 +773,7 @@ namespace PathOfExileDataScraper
                 DPS = statLines[7].TextContent,
                 ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
                 Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
-                Url = BaseUrl + WebUtility.UrlDecode(info.GetAttribute("href")),
+                Url = BaseUrl + info.GetAttribute("href"),
 
             });
 
@@ -889,7 +914,7 @@ namespace PathOfExileDataScraper
         internal Task<GenericArmour> GetGenericSingleAttributeArmours(IHtmlCollection<IElement> statLines, bool isShield)
         {
 
-            var info = statLines.First().GetElementsByTagName("a").First();
+            var info = statLines.First().FirstElementChild.FirstElementChild;
             var formattedStats = isShield ? statLines[5].InnerHtml : statLines[4].InnerHtml;
             formattedStats = formattedStats.Replace("<br>", "\\n").Replace(" <br> ", "\\n");
 
@@ -901,7 +926,7 @@ namespace PathOfExileDataScraper
                 BlockChance = isShield ? statLines[4].TextContent : "N/A",
                 Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
                 ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
-                Url = BaseUrl + WebUtility.UrlDecode(info.GetAttribute("href")),
+                Url = BaseUrl + info.GetAttribute("href"),
 
             });
 
@@ -910,7 +935,7 @@ namespace PathOfExileDataScraper
         internal Task<GenericArmour> GetGenericDoubleAttributeArmours(IHtmlCollection<IElement> statLines, bool isShield)
         {
 
-            var info = statLines.First().GetElementsByTagName("a").First();
+            var info = statLines.First().FirstElementChild.FirstElementChild;
             var formattedStats = isShield ? statLines[7].InnerHtml : statLines[6].InnerHtml;
             formattedStats = formattedStats.Replace("<br>", "\\n").Replace(" <br> ", "\\n");
 
@@ -922,7 +947,7 @@ namespace PathOfExileDataScraper
                 BlockChance = isShield ? statLines[6].TextContent : "N/A",
                 Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
                 ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
-                Url = BaseUrl + WebUtility.UrlDecode(info.GetAttribute("href")),
+                Url = BaseUrl + info.GetAttribute("href"),
 
             });
 
@@ -944,7 +969,7 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = accessory.GetElementsByTagName("td");
-                var info = statLines.First().GetElementsByTagName("a").First();
+                var info = statLines.First().FirstElementChild.FirstElementChild;
                 var statsHtml = statLines[2].InnerHtml;
                 var formattedStats = statsHtml.Replace("Corrupted", string.Empty).Replace("<br>", "\\n").Replace(" <br> ", "\\n");
 
@@ -957,7 +982,7 @@ namespace PathOfExileDataScraper
                     Stats = formattedStats,
                     IsCorrupted = statsHtml.Contains("Corrupted"),
                     Type = upperCaseSingular,
-                    Url = BaseUrl + WebUtility.UrlDecode(info.GetAttribute("href")),
+                    Url = BaseUrl + info.GetAttribute("href"),
 
                 };
 
@@ -985,7 +1010,7 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = flask.GetElementsByTagName("td");
-                var info = statLines.First().GetElementsByTagName("a").First();
+                var info = statLines.First().FirstElementChild.FirstElementChild;
 
                 var item = new GenericFlask
                 {
@@ -999,7 +1024,7 @@ namespace PathOfExileDataScraper
                     Capacity = statLines[5].TextContent,
                     ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
                     Type = upperCaseSingular,
-                    Url = BaseUrl + WebUtility.UrlDecode(info.GetAttribute("href")),
+                    Url = BaseUrl + info.GetAttribute("href"),
 
                 };
 
@@ -1026,7 +1051,7 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = flask.GetElementsByTagName("td");
-                var info = statLines.First().GetElementsByTagName("a").First();
+                var info = statLines.First().FirstElementChild.FirstElementChild;
 
                 var item = new GenericFlask
                 {
@@ -1040,7 +1065,7 @@ namespace PathOfExileDataScraper
                     Capacity = statLines[6].TextContent,
                     ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
                     Type = "Hybrid Flask",
-                    Url = BaseUrl + WebUtility.UrlDecode(info.GetAttribute("href")),
+                    Url = BaseUrl + info.GetAttribute("href"),
 
                 };
 
@@ -1067,7 +1092,7 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = flask.GetElementsByTagName("td");
-                var info = statLines.First().GetElementsByTagName("a").First();
+                var info = statLines.First().FirstElementChild.FirstElementChild;
 
                 var item = new GenericFlask
                 {
@@ -1081,7 +1106,7 @@ namespace PathOfExileDataScraper
                     Stats = statLines[6].TextContent,
                     ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
                     Type = "Utility Flask",
-                    Url = BaseUrl + WebUtility.UrlDecode(info.GetAttribute("href")),
+                    Url = BaseUrl + info.GetAttribute("href"),
 
                 };
 
@@ -1097,7 +1122,7 @@ namespace PathOfExileDataScraper
 
         #region Uniques
         #region Unique Weapons
-        internal Task GetUniqueStrDexWeapons(IElement table, string upperCaseSingular, string lowerCasePlural)
+        internal Task GetUniqueSingleAttributeWeapons(IElement table, string attribute, string upperCaseSingular, string lowerCasePlural)
         {
 
             Log($"Getting {lowerCasePlural}...");
@@ -1108,69 +1133,29 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = item.GetElementsByTagName("td");
-                var statElement = statLines.ElementAtOrDefault(10) ?? statLines.ElementAtOrDefault(9); //regular weapon ?? fishing rod
-                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
-
-                var weapon = new UniqueWeapon
-                {
-
-                    Name = statLines.First().GetElementsByTagName("a").First().TextContent,
-                    LevelReq = statLines[1].TextContent,
-                    Strength = statLines[2].TextContent,
-                    Dexterity = statLines[3].TextContent,
-                    Damage = Regex.Replace(statLines[4].InnerHtml.Replace("<br>", "\\n"), HtmlTagRegex, string.Empty),
-                    APS = statLines[5].TextContent,
-                    CritChance = statLines[6].TextContent, //i have no idea if there will always be 2 trailing digits after the .
-                    PDPS = statLines[7].TextContent,
-                    EDPS = statLines[8].TextContent,
-                    DPS = statLines.ElementAtOrDefault(9)?.TextContent ?? "N/A",
-                    ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
-                    Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
-                    Type = upperCaseSingular,
-
-                };
-
-                _uniqueWeapons.Add(weapon);
-
-            });
-
-            Log($"Finished getting {lowerCasePlural}.");
-
-            return Task.CompletedTask;
-
-        }
-
-        internal Task GetUniqueDexWeapons(IElement table, string upperCaseSingular, string lowerCasePlural)
-        {
-
-            Log($"Getting {lowerCasePlural}...");
-
-            var weapons = table.Children.Where(element => !element.TextContent.Contains("DPSStats"));
-
-            Parallel.ForEach(weapons, item =>
-            {
-
-                var statLines = item.GetElementsByTagName("td");
+                var info = statLines.First().FirstElementChild.FirstElementChild;
                 var statElement = statLines[9];
-                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace(" <br> ", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
 
                 var weapon = new UniqueWeapon
                 {
 
-                    Name = statLines.First().GetElementsByTagName("a").First().TextContent,
+                    Name = info.TextContent,
                     LevelReq = statLines[1].TextContent,
-                    Dexterity = statLines[2].TextContent,
-                    Damage = Regex.Replace(statLines[3].InnerHtml.Replace("<br>", "\\n"), HtmlTagRegex, string.Empty),
+                    Damage = statLines[3].TextContent,
                     APS = statLines[4].TextContent,
-                    CritChance = statLines[5].TextContent, //i have no idea if there will always be 2 trailing digits after the .
+                    CritChance = statLines[5].TextContent,
                     PDPS = statLines[6].TextContent,
                     EDPS = statLines[7].TextContent,
-                    DPS = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
+                    DPS = statLines[8].TextContent,
                     ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
-                    Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty), //regular weapon ?? fishing rod
+                    Url = BaseUrl + info.GetAttribute("href"),
+                    Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
                     Type = upperCaseSingular,
 
                 };
+
+                weapon.GetType().GetProperty(attribute).SetValue(weapon, statLines[2].TextContent);
 
                 _uniqueWeapons.Add(weapon);
 
@@ -1182,7 +1167,8 @@ namespace PathOfExileDataScraper
 
         }
 
-        internal Task GetUniqueDexIntelWeapons(IElement table, string upperCaseSingular, string lowerCasePlural)
+        internal Task GetUniqueDoubleAttributeWeapons(IElement table, string attributeOne, string attributeTwo,
+            string upperCaseSingular, string lowerCasePlural)
         {
 
             Log($"Getting {lowerCasePlural}...");
@@ -1193,154 +1179,30 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = item.GetElementsByTagName("td");
-                var statElement = statLines[10];
-                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
+                var info = statLines.First().FirstElementChild.FirstElementChild;
+                var statElement = upperCaseSingular == "Fishing Rod" ? statLines[9] : statLines[10]; //dam fishing rods always ruining my PoE day
+                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace(" <br> ", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
 
                 var weapon = new UniqueWeapon
                 {
 
-                    Name = statLines.First().GetElementsByTagName("a").First().TextContent,
+                    Name = info.TextContent,
                     LevelReq = statLines[1].TextContent,
-                    Dexterity = statLines[2].TextContent,
-                    Intelligence = statLines[3].TextContent,
-                    Damage = Regex.Replace(statLines[4].InnerHtml.Replace("<br>", "\\n"), HtmlTagRegex, string.Empty),
+                    Damage = statLines[4].TextContent,
                     APS = statLines[5].TextContent,
-                    CritChance = statLines[6].TextContent, //i have no idea if there will always be 2 trailing digits after the .
+                    CritChance = statLines[6].TextContent,
                     PDPS = statLines[7].TextContent,
                     EDPS = statLines[8].TextContent,
-                    DPS = statLines.ElementAtOrDefault(9)?.TextContent ?? "N/A",
+                    DPS = upperCaseSingular == "Fishing Rod" ? "N/A" : statLines[9].TextContent,
                     ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
+                    Url = BaseUrl + info.GetAttribute("href"),
                     Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
                     Type = upperCaseSingular,
 
                 };
 
-                _uniqueWeapons.Add(weapon);
-
-            });
-
-            Log($"Finished getting {lowerCasePlural}.");
-
-            return Task.CompletedTask;
-
-        }
-
-        internal Task GetUniqueStrWeapons(IElement table, string upperCaseSingular, string lowerCasePlural)
-        {
-
-            Log($"Getting {lowerCasePlural}...");
-
-            var weapons = table.Children.Where(element => !element.TextContent.Contains("DPSStats"));
-
-            Parallel.ForEach(weapons, item =>
-            {
-
-                var statLines = item.GetElementsByTagName("td");
-                var statElement = statLines[9];
-                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
-
-                var weapon = new UniqueWeapon
-                {
-
-                    Name = statLines.First().GetElementsByTagName("a").First().TextContent,
-                    LevelReq = statLines[1].TextContent,
-                    Strength = statLines[2].TextContent,
-                    Damage = Regex.Replace(statLines[3].InnerHtml.Replace("<br>", "\\n"), HtmlTagRegex, string.Empty),
-                    APS = statLines[4].TextContent,
-                    CritChance = statLines[5].TextContent, //i have no idea if there will always be 2 trailing digits after the .
-                    PDPS = statLines[6].TextContent,
-                    EDPS = statLines[7].TextContent,
-                    DPS = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
-                    ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
-                    Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty), //regular weapon ?? fishing rod
-                    Type = upperCaseSingular,
-
-                };
-
-                _uniqueWeapons.Add(weapon);
-
-            });
-
-            Log($"Finished getting {lowerCasePlural}.");
-
-            return Task.CompletedTask;
-
-        }
-
-        internal Task GetUniqueStrIntelWeapons(IElement table, string upperCaseSingular, string lowerCasePlural)
-        {
-
-            Log($"Getting {lowerCasePlural}...");
-
-            var weapons = table.Children.Where(element => !element.TextContent.Contains("DPSStats"));
-
-            Parallel.ForEach(weapons, item =>
-            {
-
-                var statLines = item.GetElementsByTagName("td");
-                var statElement = statLines[10];
-                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
-
-                var weapon = new UniqueWeapon
-                {
-
-                    Name = statLines.First().GetElementsByTagName("a").First().TextContent,
-                    LevelReq = statLines[1].TextContent,
-                    Strength = statLines[2].TextContent,
-                    Intelligence = statLines[3].TextContent,
-                    Damage = Regex.Replace(statLines[4].InnerHtml.Replace("<br>", "\\n"), HtmlTagRegex, string.Empty),
-                    APS = statLines[5].TextContent,
-                    CritChance = statLines[6].TextContent, //i have no idea if there will always be 2 trailing digits after the .
-                    PDPS = statLines[7].TextContent,
-                    EDPS = statLines[8].TextContent,
-                    DPS = statLines.ElementAtOrDefault(9)?.TextContent ?? "N/A",
-                    ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
-                    Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
-                    Type = upperCaseSingular,
-
-                };
-
-                _uniqueWeapons.Add(weapon);
-
-            });
-
-            Log($"Finished getting {lowerCasePlural}.");
-
-            return Task.CompletedTask;
-
-        }
-
-        internal Task GetUniqueIntelWeapons(IElement table, string upperCaseSingular, string lowerCasePlural)
-        {
-
-            Log($"Getting {lowerCasePlural}...");
-
-            var weapons = table.Children.Where(element => !element.TextContent.Contains("DPSStats"));
-
-            Parallel.ForEach(weapons, item =>
-            {
-
-                var statLines = item.GetElementsByTagName("td");
-                var statElement = statLines[9];
-                var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
-
-                var weapon = new UniqueWeapon
-                {
-
-                    Name = statLines.First().GetElementsByTagName("a").First().TextContent,
-                    LevelReq = statLines[1].TextContent,
-                    Intelligence = statLines[2].TextContent,
-                    Damage = Regex.Replace(statLines[3].InnerHtml.Replace("<br>", "\\n"), HtmlTagRegex, string.Empty),
-                    APS = statLines[4].TextContent,
-                    CritChance = statLines[5].TextContent, //i have no idea if there will always be 2 trailing digits after the .
-                    PDPS = statLines[6].TextContent,
-                    EDPS = statLines[7].TextContent,
-                    DPS = statLines.ElementAtOrDefault(8)?.TextContent ?? "N/A",
-                    ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
-                    Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
-                    Type = upperCaseSingular,
-
-                };
+                weapon.GetType().GetProperty(attributeOne).SetValue(weapon, statLines[2].TextContent);
+                weapon.GetType().GetProperty(attributeTwo).SetValue(weapon, statLines[3].TextContent);
 
                 _uniqueWeapons.Add(weapon);
 
@@ -1365,7 +1227,7 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = item.GetElementsByTagName("td");
-                var info = statLines.First().GetElementsByTagName("a").First();
+                var info = statLines.First().FirstElementChild.FirstElementChild;
                 var statElement = statLines[4];
                 var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
 
@@ -1375,14 +1237,14 @@ namespace PathOfExileDataScraper
                     Name = info.TextContent,
                     LevelReq = statLines[1].TextContent,
                     ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
-                    Url = BaseUrl + WebUtility.UrlDecode(info.GetAttribute("href")),
+                    Url = BaseUrl + info.GetAttribute("href"),
                     Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
                     Type = upperCaseSingular,
 
                 };
 
-                armour.GetType().GetProperties().First(property => property.Name == attribute).SetValue(armour, statLines[2].TextContent);
-                armour.GetType().GetProperties().First(property => property.Name == armorType).SetValue(armour, statLines[3].TextContent);
+                armour.GetType().GetProperty(attribute).SetValue(armour, statLines[2].TextContent);
+                armour.GetType().GetProperty(armorType).SetValue(armour, statLines[3].TextContent);
 
                 _uniqueArmours.Add(armour);
 
@@ -1406,7 +1268,7 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = item.GetElementsByTagName("td");
-                var info = statLines.First().GetElementsByTagName("a").First();
+                var info = statLines.First().FirstElementChild.FirstElementChild;
                 var statElement = statLines[4];
                 var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
 
@@ -1416,16 +1278,16 @@ namespace PathOfExileDataScraper
                     Name = info.TextContent,
                     LevelReq = statLines[1].TextContent,
                     ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
-                    Url = BaseUrl + WebUtility.UrlDecode(info.GetAttribute("href")),
+                    Url = BaseUrl + info.GetAttribute("href"),
                     Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
                     Type = upperCaseSingular,
 
                 };
 
-                armour.GetType().GetProperties().First(property => property.Name == attributeOne).SetValue(armour, statLines[2].TextContent);
-                armour.GetType().GetProperties().First(property => property.Name == attributeTwo).SetValue(armour, statLines[3].TextContent);
-                armour.GetType().GetProperties().First(property => property.Name == armorTypeOne).SetValue(armour, statLines[4].TextContent);
-                armour.GetType().GetProperties().First(property => property.Name == armorTypeTwo).SetValue(armour, statLines[5].TextContent);
+                armour.GetType().GetProperty(attributeOne).SetValue(armour, statLines[2].TextContent);
+                armour.GetType().GetProperty(attributeTwo).SetValue(armour, statLines[3].TextContent);
+                armour.GetType().GetProperty(armorTypeOne).SetValue(armour, statLines[4].TextContent);
+                armour.GetType().GetProperty(armorTypeTwo).SetValue(armour, statLines[5].TextContent);
 
                 _uniqueArmours.Add(armour);
 
@@ -1449,7 +1311,7 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = item.GetElementsByTagName("td");
-                var info = statLines.First().GetElementsByTagName("a").First();
+                var info = statLines.First().FirstElementChild.FirstElementChild;
                 var statElement = statLines[4];
                 var formattedStats = statElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
 
@@ -1465,7 +1327,7 @@ namespace PathOfExileDataScraper
                     Evasion = statLines[6].TextContent,
                     EnergyShield = statLines[7].TextContent,
                     ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
-                    Url = BaseUrl + WebUtility.UrlDecode(info.GetAttribute("href")),
+                    Url = BaseUrl + info.GetAttribute("href"),
                     Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
                     Type = upperCaseSingular,
 
@@ -1493,18 +1355,20 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = item.GetElementsByTagName("td");
+                var info = statLines.First().FirstElementChild.FirstElementChild;
                 var statElement = statLines[2];
                 var formattedStats = statElement.InnerHtml.Replace("Corrupted", string.Empty).Replace("<br>", "\\n").Trim().Replace("<span class=\"item-stat-separator -unique\">", "\\n");
 
                 var accessory = new UniqueAccessory
                 {
 
-                    Name = statLines.First().GetElementsByTagName("a").First().TextContent,
+                    Name = info.TextContent,
                     LevelReq = statLines[1].TextContent,
                     ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
                     Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
                     IsCorrupted = statElement.TextContent.Contains("Corrupted"),
                     Type = upperCaseSingular,
+                    Url = BaseUrl + info.GetAttribute("href"),
 
                 };
 
@@ -1530,13 +1394,14 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = item.GetElementsByTagName("td");
+                var info = statLines.First().FirstElementChild.FirstElementChild;
                 var statElement = statLines[6];
                 var formattedStats = statElement.InnerHtml.Replace("Corrupted", string.Empty).Replace("<br>", "\\n").Trim().Replace("<span class=\"item-stat-separator -unique\">", "\\n");
 
                 var flask = new UniqueFlask
                 {
 
-                    Name = statLines.First().GetElementsByTagName("a").First().TextContent,
+                    Name = info.TextContent,
                     LevelReq = statLines[1].TextContent,
                     Life = isManaFlask ? "0" : statLines[2].TextContent,
                     Mana = isManaFlask ? statLines[2].TextContent : "0",
@@ -1546,6 +1411,7 @@ namespace PathOfExileDataScraper
                     ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
                     Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
                     Type = upperCaseSingular,
+                    Url = BaseUrl + info.GetAttribute("href"),
 
                 };
 
@@ -1570,13 +1436,14 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = item.GetElementsByTagName("td");
+                var info = statLines.First().FirstElementChild.FirstElementChild;
                 var statElement = statLines[7];
                 var formattedStats = statElement.InnerHtml.Replace("Corrupted", string.Empty).Replace("<br>", "\\n").Trim().Replace("<span class=\"item-stat-separator -unique\">", "\\n");
 
                 var flask = new UniqueFlask
                 {
 
-                    Name = statLines.First().GetElementsByTagName("a").First().TextContent,
+                    Name = info.TextContent,
                     LevelReq = statLines[1].TextContent,
                     Life = statLines[2].TextContent,
                     Mana = statLines[3].TextContent,
@@ -1586,6 +1453,7 @@ namespace PathOfExileDataScraper
                     ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
                     Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
                     Type = "Hybrid Flask",
+                    Url = BaseUrl + info.GetAttribute("href"),
 
                 };
 
@@ -1610,6 +1478,7 @@ namespace PathOfExileDataScraper
             {
 
                 var statLines = item.GetElementsByTagName("td");
+                var info = statLines.First().FirstElementChild.FirstElementChild;
                 var buffElement = statLines[5];
                 var formattedBuffs = buffElement.InnerHtml.Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
                 var statElement = statLines[6];
@@ -1618,7 +1487,7 @@ namespace PathOfExileDataScraper
                 var flask = new UniqueFlask
                 {
 
-                    Name = statLines.First().GetElementsByTagName("a").First().TextContent,
+                    Name = info.TextContent,
                     LevelReq = statLines[1].TextContent,
                     Duration = statLines[2].TextContent,
                     Usage = statLines[3].TextContent,
@@ -1627,6 +1496,7 @@ namespace PathOfExileDataScraper
                     ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
                     Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
                     Type = "Utility Flask",
+                    Url = BaseUrl + info.GetAttribute("href"),
 
                 };
 
@@ -1646,25 +1516,27 @@ namespace PathOfExileDataScraper
 
             Log($"Getting jewels...");
 
-            var jewels = table.Children.Where(element => !element.TextContent.Contains("RadiusStats"));
+            var jewels = table.Children.Where(element => !element.TextContent.Contains("Stats"));
 
             Parallel.ForEach(jewels, item =>
             {
 
                 var statLines = item.GetElementsByTagName("td");
+                var info = statLines.First().FirstElementChild.FirstElementChild;
                 var statElement = statLines[3];
                 var formattedStats = statElement.InnerHtml.Replace("Corrupted", string.Empty).Replace("<br>", "\\n").Replace("<span class=\"item-stat-separator -unique\">", "\\n");
 
                 var jewel = new UniqueJewel
                 {
 
-                    Name = statLines.First().GetElementsByTagName("a").First().TextContent,
+                    Name = info.TextContent,
                     Limit = statLines[1].TextContent,
                     Radius = statLines[2].TextContent,
                     ImageUrl = statLines.First().GetElementsByTagName("img").First().GetAttribute("src"),
                     Stats = Regex.Replace(formattedStats, HtmlTagRegex, string.Empty),
                     IsCorrupted = statLines[3].TextContent.Contains("Corrupted"),
-                    ObtainMethod = obtainMethod
+                    ObtainMethod = obtainMethod,
+                    Url = BaseUrl + info.GetAttribute("href"),
 
                 };
 

@@ -19,6 +19,7 @@ namespace PathOfExileDataScraper.Items
         public bool IsCorrupted { get; set; } = false;
         public string ImageUrl { get; set; } = "N/A";
         public string ObtainMethod { get; set; }
+        public string Url { get; set; } = "N/A";
 
     }
 
